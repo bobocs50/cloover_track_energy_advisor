@@ -13,25 +13,23 @@ Feature ID: F02 (contract) — F17 wires endpoints — F03/F05-F11 implement eng
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
 
 
-class FuelType(str, Enum):
+class FuelType(StrEnum):
     """Fossil heating fuel.  District heating is out of scope for v1 (§3.2)."""
 
     OIL = "OIL"
     GAS = "GAS"
 
 
-class CarType(str, Enum):
+class CarType(StrEnum):
     """Mobility type.  EV = already drives electric; NONE = no car."""
 
     PETROL = "PETROL"
@@ -40,7 +38,7 @@ class CarType(str, Enum):
     NONE = "NONE"
 
 
-class FeasibilityStatus(str, Enum):
+class FeasibilityStatus(StrEnum):
     """Traffic-light status for a single feasibility check (green/amber/info)."""
 
     GREEN = "green"
@@ -56,16 +54,18 @@ class FeasibilityStatus(str, Enum):
 class Address(BaseModel):
     """Full postal address — mandatory for Site-Check roof geometry and permit lookups."""
 
-    street: str = Field(..., description="Street name (Straße).", example="Unter den Linden")
-    house_no: str = Field(..., description="House/building number (Hausnummer).", example="17")
-    city: str = Field(..., description="City (Ort/Stadt).", example="Berlin")
+    street: str = Field(..., description="Street name (Straße).", examples=["Unter den Linden"])
+    house_no: str = Field(..., description="House/building number (Hausnummer).", examples=["17"])
+    city: str = Field(..., description="City (Ort/Stadt).", examples=["Berlin"])
 
 
 class HeatingInput(BaseModel):
     """Current heating system details."""
 
     fuel: FuelType = Field(..., description="Fossil fuel type.")
-    eur_month: float = Field(..., description="Average monthly heating spend in EUR.", example=180)
+    eur_month: float = Field(
+        ..., description="Average monthly heating spend in EUR.", examples=[180]
+    )
 
 
 class MobilityInput(BaseModel):
@@ -76,15 +76,15 @@ class MobilityInput(BaseModel):
     """
 
     kind: CarType = Field(..., description="Vehicle type.")
-    km_month: Optional[float] = Field(
+    km_month: float | None = Field(
         default=None,
         description="Average monthly distance driven in km (canonical).",
-        example=1200,
+        examples=[1200],
     )
-    eur_month: Optional[float] = Field(
+    eur_month: float | None = Field(
         default=None,
         description="Average monthly spend on fuel/charging in EUR (alternative to km_month).",
-        example=160,
+        examples=[160],
     )
 
 
@@ -120,27 +120,27 @@ class Household(BaseModel):
             "5-digit German postcode.  Drives irradiance, grid fees, climate zone, "
             "and prices independently of address (§3.1, labelled assumption)."
         ),
-        example="10115",
+        examples=["10115"],
     )
     floor_area_m2: int = Field(
         ...,
         description="Living floor area in m².  Required for heat-load calculation (L3).",
-        example=140,
+        examples=[140],
     )
     building_year: int = Field(
         ...,
         description="Year of construction.  Drives heat-load factor (§10 table) for L3.",
-        example=1985,
+        examples=[1985],
     )
     occupants: int = Field(
         ...,
         description="Number of occupants.  Drives load profile and consumption scaling.",
-        example=3,
+        examples=[3],
     )
     electricity_eur_month: float = Field(
         ...,
         description="Average monthly electricity spend in EUR before any upgrades.",
-        example=95,
+        examples=[95],
     )
     heating: HeatingInput = Field(..., description="Current heating system details.")
     mobility: MobilityInput = Field(..., description="Current mobility profile.")
@@ -152,7 +152,7 @@ class Household(BaseModel):
             "Installed PV capacity in kWp.  0 = no existing PV.  "
             "If > 0, the ladder credits only the incremental yield above this."
         ),
-        example=0,
+        examples=[0],
     )
     existing_battery_kwh: float = Field(
         default=0,
@@ -160,9 +160,9 @@ class Household(BaseModel):
             "Installed battery capacity in kWh.  0 = no existing battery.  "
             "If > 0, the ladder adds only the delta up to the recommended size."
         ),
-        example=0,
+        examples=[0],
     )
-    existing_heatpump_year: Optional[int] = Field(
+    existing_heatpump_year: int | None = Field(
         default=None,
         description=(
             "Year the existing heat pump was installed, or null if no HP present.  "
@@ -170,7 +170,7 @@ class Household(BaseModel):
             "If set: age ≥ 12 yrs or est. SCOP < 3.0 → Layer 3 = Case B efficiency upgrade; "
             "modern HP → Layer 3 Δ = 0 (not offered)."
         ),
-        example=None,
+        examples=[None],
     )
     existing_ev: bool = Field(
         default=False,
@@ -178,7 +178,7 @@ class Household(BaseModel):
             "True if the household already drives an EV.  Changes mobility baseline "
             "from fuel cost to public charging cost (§3.2)."
         ),
-        example=False,
+        examples=[False],
     )
     existing_ev_charger: bool = Field(
         default=False,
@@ -187,9 +187,9 @@ class Household(BaseModel):
             "EV=True + charger=False → Layer 4 = Case B wallbox-only offer.  "
             "EV=True + charger=True → Layer 4 Δ = 0 (not offered)."
         ),
-        example=False,
+        examples=[False],
     )
-    selection: Optional[SelectionInput] = Field(
+    selection: SelectionInput | None = Field(
         default=None,
         description=(
             "À-la-carte selection (optional).  If omitted, the engine runs the full "
@@ -212,18 +212,26 @@ class Breakdown(BaseModel):
 
     electricity_eur_month: float = Field(
         ...,
-        description="Monthly electricity saving vs today (solar self-consumption + battery arbitrage).",
-        example=61,
+        description=(
+            "Monthly electricity saving vs today (solar self-consumption + battery arbitrage)."
+        ),
+        examples=[61],
     )
     heating_eur_month: float = Field(
         ...,
-        description="Monthly heating saving vs today (heat pump displacing oil/gas); 0 if no heat-pump rung.",
-        example=55,
+        description=(
+            "Monthly heating saving vs today (heat pump displacing oil/gas); "
+            "0 if no heat-pump rung."
+        ),
+        examples=[55],
     )
     mobility_eur_month: float = Field(
         ...,
-        description="Monthly mobility saving vs today (EV home charging displacing petrol); 0 if no EV rung.",
-        example=26,
+        description=(
+            "Monthly mobility saving vs today (EV home charging displacing petrol); "
+            "0 if no EV rung."
+        ),
+        examples=[26],
     )
 
 
@@ -233,22 +241,22 @@ class Capex(BaseModel):
     gross_eur: float = Field(
         ...,
         description="Total gross capital cost before subsidies in EUR.",
-        example=42000,
+        examples=[42000],
     )
     subsidy_eur: float = Field(
         ...,
         description="Total subsidy / grant applied in EUR.",
-        example=11000,
+        examples=[11000],
     )
     after_subsidy_eur: float = Field(
         ...,
         description="Net capex after subsidy deduction in EUR (= gross − subsidy).",
-        example=31000,
+        examples=[31000],
     )
     subsidy_note: str = Field(
         ...,
         description="Human-readable explanation of the subsidies applied.",
-        example="€22k HP − 50% KfW 458 = €11k; PV/battery 0% VAT",
+        examples=["€22k HP − 50% KfW 458 = €11k; PV/battery 0% VAT"],
     )
 
 
@@ -258,22 +266,22 @@ class Confidence(BaseModel):
     band_eur: float = Field(
         ...,
         description="Half-width of the confidence band in EUR/mo.",
-        example=35,
+        examples=[35],
     )
     low_eur: float = Field(
         ...,
         description="Lower bound of monthly saving in EUR/mo.",
-        example=85,
+        examples=[85],
     )
     high_eur: float = Field(
         ...,
         description="Upper bound of monthly saving in EUR/mo.",
-        example=155,
+        examples=[155],
     )
     biggest_driver: str = Field(
         ...,
         description="Name of the biggest uncertainty source.",
-        example="self-consumption ratio (autarky 0.60 ± 0.10)",
+        examples=["self-consumption ratio (autarky 0.60 ± 0.10)"],
     )
 
 
@@ -283,25 +291,27 @@ class Upsell(BaseModel):
     from_scenario_id: str = Field(
         ...,
         description="The current (lower) scenario being compared from.",
-        example="pv-battery",
+        examples=["pv-battery"],
     )
     to_scenario_id: str = Field(
         ...,
         description="The recommended (higher) scenario being up-sold to.",
-        example="full-bundle",
+        examples=["full-bundle"],
     )
     delta_eur_month: float = Field(
         ...,
         description="Incremental monthly saving of upgrading (to − from).",
-        example=144,
+        examples=[144],
     )
     reason_md: str = Field(
         ...,
         description="Markdown copy explaining why the upgrade is worthwhile.",
-        example=(
-            "Going from PV+battery (−€24/mo) to the full bundle lands **+€120/mo** "
-            "because you're still burning oil + petrol that the heat pump and EV displace."
-        ),
+        examples=[
+            (
+                "Going from PV+battery (−€24/mo) to the full bundle lands **+€120/mo** "
+                "because you're still burning oil + petrol that the heat pump and EV displace."
+            )
+        ],
     )
 
 
@@ -311,24 +321,22 @@ class Assumption(BaseModel):
     field: str = Field(
         ...,
         description="Field name / assumption key.",
-        example="specific_yield_kwh_per_kwp",
+        examples=["specific_yield_kwh_per_kwp"],
     )
     value: str = Field(
         ...,
         description="Human-readable value string.",
-        example="980 kWh/kWp",
+        examples=["980 kWh/kWp"],
     )
     source: str = Field(
         ...,
         description="Official source or derivation note.",
-        example="PVGIS fallback (PLZ 10115)",
+        examples=["PVGIS fallback (PLZ 10115)"],
     )
     editable: bool = Field(
         ...,
-        description=(
-            "If True, the user can override this value to tighten the confidence band."
-        ),
-        example=True,
+        description=("If True, the user can override this value to tighten the confidence band."),
+        examples=[True],
     )
 
 
@@ -342,19 +350,19 @@ class ScenarioResult(BaseModel):
     scenario_id: str = Field(
         ...,
         description="Stable identifier for this scenario (used by upsell references).",
-        example="full-bundle",
+        examples=["full-bundle"],
     )
     label: str = Field(
         ...,
         description="Human-readable scenario name displayed in the configurator.",
-        example="☀️ Solar + 🔋 Battery + ♨️ Heat pump + 🚗 EV charger",
+        examples=["☀️ Solar + 🔋 Battery + ♨️ Heat pump + 🚗 EV charger"],
     )
     breakdown: Breakdown = Field(..., description="Projected monthly spend breakdown.")
     capex: Capex = Field(..., description="Capital expenditure breakdown.")
     installment_eur_month: float = Field(
         ...,
         description="Monthly loan installment in EUR (annuity on after_subsidy capex).",
-        example=244,
+        examples=[244],
     )
     monthly_saving_eur: float = Field(
         ...,
@@ -362,23 +370,23 @@ class ScenarioResult(BaseModel):
             "Net monthly saving vs baseline = gross_saving − installment_eur_month.  "
             "CUMULATIVE across all layers up to this rung.  May be negative early rungs."
         ),
-        example=120,
+        examples=[120],
     )
     saving_after_payoff_eur: float = Field(
         ...,
         description="Monthly saving once the loan is fully paid off (= gross saving only).",
-        example=364,
+        examples=[364],
     )
     break_even_month: int = Field(
         ...,
         description="Month number at which cumulative_net first turns non-negative.",
-        example=156,
+        examples=[156],
     )
     confidence: Confidence = Field(..., description="Uncertainty band on monthly_saving_eur.")
     payback_note: str = Field(
         ...,
         description="Plain-language payback summary for the honest-curve display.",
-        example="€120/mo from day one; EV is the biggest single contributor",
+        examples=["€120/mo from day one; EV is the biggest single contributor"],
     )
 
 
@@ -415,7 +423,7 @@ class Recommendation(BaseModel):
             "Baseline monthly spend before any upgrades (electricity + heating + mobility).  "
             "Drives the before/after display (F21)."
         ),
-        example=435,
+        examples=[435],
     )
     explanation_md: str = Field(
         ...,
@@ -423,7 +431,7 @@ class Recommendation(BaseModel):
             "LLM-generated Markdown paragraph explaining why this config fits this home (F16).  "
             "Plain German for the demo.  NEVER the numeric source of truth."
         ),
-        example="Ihr Haus ist ideal für das volle Paket...",
+        examples=["Ihr Haus ist ideal für das volle Paket..."],
     )
     proposal_copy_md: str = Field(
         ...,
@@ -431,7 +439,7 @@ class Recommendation(BaseModel):
             "LLM-generated Markdown proposal copy for the CTA panel (F16).  "
             "NEVER the numeric source of truth."
         ),
-        example="**Ihr persönlicher Energieplan...**",
+        examples=["**Ihr persönlicher Energieplan...**"],
     )
     assumptions: list[Assumption] = Field(
         ...,
@@ -452,13 +460,9 @@ class SiteCheckRequest(BaseModel):
     """
 
     address: Address = Field(..., description="Full postal address.")
-    plz: str = Field(..., description="5-digit German postcode.", example="10115")
-    floor_area_m2: int = Field(
-        ..., description="Living area in m².", example=140
-    )
-    building_year: int = Field(
-        ..., description="Year of construction.", example=1985
-    )
+    plz: str = Field(..., description="5-digit German postcode.", examples=["10115"])
+    floor_area_m2: int = Field(..., description="Living area in m².", examples=[140])
+    building_year: int = Field(..., description="Year of construction.", examples=[1985])
 
 
 class FeasibilityFlag(BaseModel):
@@ -471,57 +475,57 @@ class FeasibilityFlag(BaseModel):
     product: str = Field(
         ...,
         description='Product category (e.g. "Solar PV", "Heat pump", "EV charger", "Battery").',
-        example="Solar PV",
+        examples=["Solar PV"],
     )
     check: str = Field(
         ...,
         description="Name of the specific rule or check performed.",
-        example="Building permit (Baugenehmigung)",
+        examples=["Building permit (Baugenehmigung)"],
     )
     status: FeasibilityStatus = Field(
         ...,
         description="Traffic-light result.",
-        example=FeasibilityStatus.GREEN,
+        examples=[FeasibilityStatus.GREEN],
     )
     message: str = Field(
         ...,
         description="Human-readable result message.",
-        example="Roof PV is verfahrensfrei — no permit needed (LBO)",
+        examples=["Roof PV is verfahrensfrei — no permit needed (LBO)"],
     )
 
 
 class EnergyContext(BaseModel):
     """Location-resolved energy parameters returned by the site-check (F15)."""
 
-    lat: float = Field(..., description="Latitude resolved from the address.", example=52.5163)
-    lon: float = Field(..., description="Longitude resolved from the address.", example=13.3777)
+    lat: float = Field(..., description="Latitude resolved from the address.", examples=[52.5163])
+    lon: float = Field(..., description="Longitude resolved from the address.", examples=[13.3777])
     specific_yield_kwh_per_kwp: float = Field(
         ...,
         description="Annual PV yield per kWp for this location (kWh/kWp/yr).",
-        example=980,
+        examples=[980],
     )
     retail_price_eur_kwh: float = Field(
         ...,
         description="Local retail electricity price in EUR/kWh.",
-        example=0.37,
+        examples=[0.37],
     )
     grid_fee_eur_kwh: float = Field(
         ...,
         description="Local grid fee in EUR/kWh (per-PLZ overlay from Netztransparenz).",
-        example=0.07,
+        examples=[0.07],
     )
     climate_zone: str = Field(
         ...,
         description="DE climate zone identifier (used for heat-load table, §5.3).",
-        example="DE-4",
+        examples=["DE-4"],
     )
-    mastr_neighbour_count: Optional[int] = Field(
+    mastr_neighbour_count: int | None = Field(
         ...,
         description=(
             "Number of installed PV systems in this PLZ from MaStR (social proof).  "
             "None if unknown (no MaStR data for this PLZ)."
         ),
-        example=47,
+        examples=[47],
     )
 
 
@@ -534,7 +538,7 @@ class SiteCheckResponse(BaseModel):
             "True if the roof is viable for PV (no Denkmalschutz block, no structural flag).  "
             "Amber = viable with caveats (user should confirm heritage listing)."
         ),
-        example=True,
+        examples=[True],
     )
     feasibility_flags: list[FeasibilityFlag] = Field(
         ...,
@@ -563,19 +567,20 @@ class PricingContext(BaseModel):
     Populated by F12/F17 (resolver).
     """
 
-    plz: str = ""
-    retail_price_eur_kwh: float = 0.37
-    feedin_price_eur_kwh: float = 0.0778
-    grid_fee_eur_kwh: float = 0.07
-    dynamic_spread_eur_kwh: float = 0.12
-    pv_per_kwp_eur: float = 1450.0
-    battery_per_kwh_eur: float = 700.0
-    heatpump_fixed_eur: float = 22000.0
-    wallbox_fixed_eur: float = 1200.0
-    oil_per_litre_eur: float = 1.10
-    gas_per_kwh_eur: float = 0.115
-    petrol_per_litre_eur: float = 1.85
-    diesel_per_litre_eur: float = 1.75
-    public_charge_per_kwh_eur: float = 0.45
-    financing_apr: float = 0.05
-    financing_term_months: int = 180
+    plz: str
+    retail_price_eur_kwh: float
+    feedin_price_eur_kwh: float
+    grid_fee_eur_kwh: float
+    dynamic_spread_eur_kwh: float
+    pv_per_kwp_eur: float
+    battery_per_kwh_eur: float
+    heatpump_fixed_eur: float
+    wallbox_fixed_eur: float
+    oil_per_litre_eur: float
+    gas_per_kwh_eur: float
+    petrol_per_litre_eur: float
+    diesel_per_litre_eur: float
+    public_charge_per_kwh_eur: float
+    home_charge_price_eur_kwh: float
+    financing_apr: float
+    financing_term_months: int
