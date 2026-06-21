@@ -17,7 +17,7 @@ import {
   Sun,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { createElement, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { Assumption, Recommendation, ScenarioResult, Tier } from "@/lib/types";
 import {
   groupEventsByStage,
@@ -314,6 +314,7 @@ export default function OfferResultPage({
   const best = rec.best;
   const financeMonths = financeTermMonths(rec);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   // Distil the live run into headline evidence. Absent on the skip-to-offers
   // path → the section falls back to the Recommendation's own capex + drivers.
@@ -328,23 +329,29 @@ export default function OfferResultPage({
 
   async function handlePdfDownload() {
     setGeneratingPdf(true);
+    setPdfError(null);
     try {
-      // Fetch LLM-generated narrative sections from the backend
-      const sections = await postReport(rec, address);
+      // Fetch LLM-generated narrative sections; fall back to empty array if backend is unreachable
+      let sections: import("@/lib/api").ReportSection[] = [];
+      try {
+        sections = await postReport(rec, address);
+      } catch {
+        // Backend unavailable (demo/offline mode) — PDF still generates with stub layout
+      }
 
-      const [pdfMod, docMod] = await Promise.all([
-        import("@react-pdf/renderer"),
-        import("./NarrativePdf"),
-      ]);
-      const doc = createElement(docMod.NarrativePdf, { rec, sections, address });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const blob = await pdfMod.pdf(doc as any).toBlob();
+      const { generatePdfBlob } = await import("./NarrativePdf");
+      const blob = await generatePdfBlob(rec, sections, address);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = "heimwende-energy-advisory-report.pdf";
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      // Revoke after a short delay so the browser can open the download
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : "PDF generation failed");
     } finally {
       setGeneratingPdf(false);
     }
@@ -537,6 +544,11 @@ export default function OfferResultPage({
               )}
             </button>
           </div>
+          {pdfError && (
+            <p className="w-full text-[12px] font-medium text-[#dc2626]">
+              PDF error: {pdfError}
+            </p>
+          )}
         </section>
       </div>
     </main>

@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, pdf } from "@react-pdf/renderer";
 import type { Recommendation, Tier } from "@/lib/types";
 import type { ReportSection } from "@/lib/api";
 
@@ -344,7 +344,8 @@ export function NarrativePdf({
     year: "numeric",
   });
 
-  // Split sections: first 3 on page 2, last 3 + table on page 3
+  // Split sections: first 3 on page 2, last 3 + table on page 3.
+  // When sections is empty (backend unreachable) skip the narrative pages entirely.
   const firstHalf = sections.slice(0, 3);
   const secondHalf = sections.slice(3);
 
@@ -357,19 +358,21 @@ export function NarrativePdf({
       {/* Page 1: Cover */}
       <CoverPage rec={rec} date={date} address={address} />
 
-      {/* Page 2: Sections 1–3 */}
-      <Page size="A4" style={s.page}>
-        <PdfHeader date={date} address={address} />
-        {firstHalf.map((sec) => (
-          <View key={sec.heading} style={s.sectionContainer}>
-            <Text style={s.sectionHeading}>{sec.heading}</Text>
-            <Text style={s.sectionBody}>{sec.body}</Text>
-          </View>
-        ))}
-        <PdfFooter label="2 / 3" />
-      </Page>
+      {/* Pages 2 & 3: Narrative sections (only when sections were returned) */}
+      {sections.length > 0 && (
+        <Page size="A4" style={s.page}>
+          <PdfHeader date={date} address={address} />
+          {firstHalf.map((sec) => (
+            <View key={sec.heading} style={s.sectionContainer}>
+              <Text style={s.sectionHeading}>{sec.heading}</Text>
+              <Text style={s.sectionBody}>{sec.body}</Text>
+            </View>
+          ))}
+          <PdfFooter label="2 / 3" />
+        </Page>
+      )}
 
-      {/* Page 3: Sections 4–6 + tier table */}
+      {/* Page 3 (or 2 in offline mode): Remaining sections + tier table */}
       <Page size="A4" style={s.page}>
         <PdfHeader date={date} address={address} />
         {secondHalf.map((sec) => (
@@ -379,8 +382,20 @@ export function NarrativePdf({
           </View>
         ))}
         <TierTable tiers={rec.tiers} rec={rec} />
-        <PdfFooter label="3 / 3" />
+        <PdfFooter label={sections.length > 0 ? "3 / 3" : "2 / 2"} />
       </Page>
     </Document>
   );
+}
+
+// ── Blob helper (called by OfferResultPage) ───────────────────────────────────
+
+export async function generatePdfBlob(
+  rec: Recommendation,
+  sections: ReportSection[],
+  address?: string,
+): Promise<Blob> {
+  return pdf(
+    <NarrativePdf rec={rec} sections={sections} address={address} />,
+  ).toBlob();
 }
