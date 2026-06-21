@@ -43,6 +43,90 @@ DENKMAL_WMS: dict[str, str | None] = {
 _plz_cache: dict[str, str] = {}
 
 
+# Provenance of a check result — how we know what we know.
+SourceType = Literal["live_internet", "supabase_cache", "seeded_fallback", "static_rule"]
+
+# Categories the activity feed groups checks under, in display order.
+PERMIT_CATEGORY_ORDER: list[str] = [
+    "Location",
+    "Solar permissions",
+    "Heat pump permissions",
+    "EV charger permissions",
+    "Battery permissions",
+]
+
+# product → category. "location" is a synthetic product for the orienting check.
+_PRODUCT_CATEGORY: dict[str, str] = {
+    "location": "Location",
+    "solar": "Solar permissions",
+    "heatpump": "Heat pump permissions",
+    "ev_charger": "EV charger permissions",
+    "battery": "Battery permissions",
+}
+
+# Per-check reasoning, keyed by check id. Stable regardless of pass/warn/fail — it
+# explains what the check means and how it feeds the offer. Deterministic (no money
+# math here); the engine owns all € figures. Shape: (why_it_matters, offer_effect).
+_PERMIT_REASONING: dict[str, tuple[str, str]] = {
+    "location": (
+        "Locates the address in its Bundesland and municipality to pick the right rules.",
+        "Sets which LBO / Denkmal / B-Plan rules apply to every downstream permit check.",
+    ),
+    "solar_lbo": (
+        "Determines whether solar needs a building permit at all.",
+        "Verfahrensfrei means no permit delay — the solar rung can proceed immediately.",
+    ),
+    "solar_denkmal": (
+        "A heritage listing can block roof-mounted PV.",
+        "If listed, the solar rung may be removed or need authority approval before install.",
+    ),
+    "hp_denkmal": (
+        "Heritage rules can restrict a visible outdoor unit.",
+        "If listed, heat-pump placement may need approval; siting the unit out of "
+        "view usually resolves it.",
+    ),
+    "solar_bplan": (
+        "The local development plan can restrict roof PV.",
+        "A restriction flags the solar rung for Bauamt confirmation; silence means "
+        "the baseline permits it.",
+    ),
+    "hp_bplan": (
+        "The local development plan can restrict outdoor units.",
+        "A restriction flags the heat-pump rung for confirmation; silence means it is permitted.",
+    ),
+    "solar_mastr": (
+        "Neighbour installations show local permitting is routine.",
+        "Strong precedent raises confidence in the solar rung; thin precedent is "
+        "informational only.",
+    ),
+    "ev_parking": (
+        "A wallbox needs a private parking space.",
+        "No private parking removes the EV-charger rung from the offer.",
+    ),
+    "ev_weg": (
+        "Apartments need a co-owner vote to install a wallbox.",
+        "A WEG requirement keeps the EV rung but adds an approval step before install.",
+    ),
+    "hp_geg": (
+        "GEG 2024 governs when a fossil boiler must be replaced.",
+        "An old boiler makes the heat-pump rung mandatory-eligible and maximises the "
+        "KfW 458 subsidy window.",
+    ),
+    "hp_noise": (
+        "TA Lärm limits outdoor-unit noise on dense plots.",
+        "A tight plot keeps the heat-pump rung but recommends a low-noise unit and careful siting.",
+    ),
+    "battery_install": (
+        "Confirms indoor storage needs no permit.",
+        "No permit barrier — the battery rung can be added whenever the economics support it.",
+    ),
+    "battery_mastr": (
+        "Grid-connected batteries must be registered in MaStR.",
+        "Registration is a post-install installer task; it does not affect the offer economics.",
+    ),
+}
+
+
 @dataclass
 class PermitCheck:
     id: str
@@ -55,6 +139,11 @@ class PermitCheck:
     source_url: str | None
     source_name: str
     fetched_at: str                           # ISO 8601
+    category: str = ""                        # one of PERMIT_CATEGORY_ORDER
+    source_type: SourceType = "static_rule"   # how the result was obtained
+    confidence: float | None = None           # 0–1, when meaningful
+    why_it_matters: str = ""                  # deterministic reasoning for the feed
+    offer_effect: str = ""                    # how the result feeds the offer
 
 
 def _now() -> str:
@@ -71,7 +160,11 @@ def _make_check(
     source_name: str,
     source_url: str | None = None,
     cited_clause: str | None = None,
+    *,
+    source_type: SourceType = "static_rule",
+    confidence: float | None = None,
 ) -> PermitCheck:
+    why, effect = _PERMIT_REASONING.get(id, ("", ""))
     return PermitCheck(
         id=id,
         product=product,
@@ -83,7 +176,20 @@ def _make_check(
         source_url=source_url,
         source_name=source_name,
         fetched_at=_now(),
+        category=_PRODUCT_CATEGORY.get(product, ""),
+        source_type=source_type,
+        confidence=confidence,
+        why_it_matters=why,
+        offer_effect=effect,
     )
+
+
+def group_by_category(checks: list[PermitCheck]) -> dict[str, list[PermitCheck]]:
+    """Group checks into the canonical category order (empty categories omitted)."""
+    grouped: dict[str, list[PermitCheck]] = {cat: [] for cat in PERMIT_CATEGORY_ORDER}
+    for ch in checks:
+        grouped.setdefault(ch.category or "Location", []).append(ch)
+    return {cat: rows for cat, rows in grouped.items() if rows}
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +215,26 @@ def plz_to_bundesland(plz: str) -> str:
     except Exception:
         pass
     return "Unknown"
+
+
+def check_location(plz: str, city: str) -> PermitCheck:
+    """Orienting check: resolve PLZ → Bundesland so downstream rules pick the right LBO."""
+    bundesland = plz_to_bundesland(plz)
+    if bundesland != "Unknown":
+        return _make_check(
+            "location", "location", "Address → Bundesland",
+            "pass", f"{city or plz} · {bundesland}",
+            f"PLZ {plz} resolved to {bundesland}. Local building rules selected for this state.",
+            "OpenPLZ API", "https://openplzapi.org",
+            source_type="live_internet", confidence=0.9,
+        )
+    return _make_check(
+        "location", "location", "Address → Bundesland",
+        "warn", f"{city or plz} · state unresolved",
+        f"Could not resolve PLZ {plz} to a Bundesland. Falling back to federal baseline rules.",
+        "OpenPLZ API", "https://openplzapi.org",
+        source_type="seeded_fallback", confidence=0.0,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -188,12 +314,14 @@ def check_denkmal_solar(lat: float, lng: float, bundesland: str) -> PermitCheck:
                 f"Heritage listed — {name}",
                 "Solar panels require Denkmalschutzbehörde approval (usually refused for listed buildings).",
                 source_name, source_url,
+                source_type="live_internet", confidence=0.9,
             )
         return _make_check(
             "solar_denkmal", "solar", "Heritage protection",
             "pass", "Not heritage listed",
             f"No Kulturdenkmal found at this address ({bundesland} monument registry).",
             source_name, source_url,
+            source_type="live_internet", confidence=0.9,
         )
 
     # Fallback: OSM
@@ -205,6 +333,7 @@ def check_denkmal_solar(lat: float, lng: float, bundesland: str) -> PermitCheck:
             f"Possible heritage listing — {name}",
             "OSM indicates a heritage feature nearby. Confirm with local Denkmalschutzbehörde.",
             "OpenStreetMap Overpass", "https://overpass-api.de",
+            source_type="live_internet", confidence=0.5,
         )
     # OSM-only Bundesland with no hit → can't confirm clear
     return _make_check(
@@ -212,6 +341,7 @@ def check_denkmal_solar(lat: float, lng: float, bundesland: str) -> PermitCheck:
         "warn", "Heritage status unverified",
         f"No public Denkmal API for {bundesland}. Confirm with Landesdenkmalamt before ordering.",
         "OpenStreetMap Overpass", "https://overpass-api.de",
+        source_type="live_internet", confidence=0.3,
     )
 
 
@@ -230,12 +360,14 @@ def check_denkmal_heatpump(lat: float, lng: float, bundesland: str) -> PermitChe
                 f"Heritage listed — approval needed ({name})",
                 "Heat pump outdoor unit requires Denkmalschutzbehörde approval. Often granted if unit is not visible from street.",
                 source_name, source_url,
+                source_type="live_internet", confidence=0.9,
             )
         return _make_check(
             "hp_denkmal", "heatpump", "Heritage protection",
             "pass", "Not heritage listed",
             f"No Kulturdenkmal found at this address ({bundesland} monument registry).",
             source_name, source_url,
+            source_type="live_internet", confidence=0.9,
         )
 
     listed, name = _query_denkmal_osm(lat, lng)
@@ -246,12 +378,14 @@ def check_denkmal_heatpump(lat: float, lng: float, bundesland: str) -> PermitChe
             f"Possible heritage listing — {name}",
             "OSM indicates a heritage feature. Confirm with Denkmalschutzbehörde before installation.",
             "OpenStreetMap Overpass", "https://overpass-api.de",
+            source_type="live_internet", confidence=0.5,
         )
     return _make_check(
         "hp_denkmal", "heatpump", "Heritage protection",
         "warn", "Heritage status unverified",
         f"No public Denkmal API for {bundesland}. Confirm with Landesdenkmalamt before ordering.",
         "OpenStreetMap Overpass", "https://overpass-api.de",
+        source_type="live_internet", confidence=0.3,
     )
 
 
@@ -271,11 +405,13 @@ def check_bplan(
             _make_check("solar_bplan", "solar", "Zone + solar permitted", "warn",
                         "B-Plan check skipped (no Tavily key)",
                         "Bundesland baseline applies. Verify with local Bauamt.",
-                        "Bebauungsplan RAG"),
+                        "Bebauungsplan RAG",
+                        source_type="seeded_fallback"),
             _make_check("hp_bplan", "heatpump", "Zone + outdoor unit permitted", "warn",
                         "B-Plan check skipped (no Tavily key)",
                         "Bundesland baseline applies. Verify with local Bauamt.",
-                        "Bebauungsplan RAG"),
+                        "Bebauungsplan RAG",
+                        source_type="seeded_fallback"),
         ]
 
     # Tavily search — use city name for targeted results
@@ -303,11 +439,13 @@ def check_bplan(
             _make_check("solar_bplan", "solar", "Zone + solar permitted", "pass",
                         "No B-Plan restriction found",
                         f"No specific Bebauungsplan found for {city} ({plz}). Federal baseline applies — solar PV is verfahrensfrei under LBO.",
-                        "Bebauungsplan RAG", top_url),
+                        "Bebauungsplan RAG", top_url,
+                        source_type="live_internet", confidence=0.5),
             _make_check("hp_bplan", "heatpump", "Zone + outdoor unit permitted", "pass",
                         "No B-Plan restriction found",
                         f"No specific Bebauungsplan found for {city} ({plz}). Federal baseline applies — outdoor heat pump unit is generally permitted.",
-                        "Bebauungsplan RAG", top_url),
+                        "Bebauungsplan RAG", top_url,
+                        source_type="live_internet", confidence=0.5),
         ]
 
     # LLM extraction
@@ -351,17 +489,20 @@ def check_bplan(
             return _make_check(check_id, product, check_name, "fail",
                                 "Restricted by B-Plan",
                                 "Bebauungsplan contains a restriction. Confirm with Bauamt before ordering.",
-                                "Bebauungsplan RAG", top_url, clause)
+                                "Bebauungsplan RAG", top_url, clause,
+                                source_type="live_internet", confidence=0.7)
         if status_str == "permitted":
             return _make_check(check_id, product, check_name, "pass",
                                 "Permitted by B-Plan",
                                 "Bebauungsplan explicitly permits this installation.",
-                                "Bebauungsplan RAG", top_url, clause)
+                                "Bebauungsplan RAG", top_url, clause,
+                                source_type="live_internet", confidence=0.7)
         # silent → fall back to Bundesland baseline (verfahrensfrei)
         return _make_check(check_id, product, check_name, "pass",
                             "No B-Plan restriction found",
                             "B-Plan is silent on this — Bundesland baseline (verfahrensfrei) applies.",
-                            "Bebauungsplan RAG", top_url, clause)
+                            "Bebauungsplan RAG", top_url, clause,
+                            source_type="live_internet", confidence=0.6)
 
     return [
         _bplan_check("solar_bplan", "solar", "Zone + solar permitted", "solar"),
@@ -376,7 +517,13 @@ def check_bplan(
 _MASTR_KENDO_URL = "https://www.marktstammdatenregister.de/MaStR/Einheit/EinheitenAjaxMVC"
 
 
-def _classify_mastr(count: int, plz: str, source_url: str) -> PermitCheck:
+def _classify_mastr(
+    count: int,
+    plz: str,
+    source_url: str,
+    source_type: SourceType = "live_internet",
+    confidence: float | None = None,
+) -> PermitCheck:
     mastr_url = f"https://www.marktstammdatenregister.de/MaStR/Einheit/EinheitenMVC?filter=Postleitzahl~eq~{plz}~and~Einheittyp~eq~2"
     if count >= 40:
         return _make_check(
@@ -384,6 +531,7 @@ def _classify_mastr(count: int, plz: str, source_url: str) -> PermitCheck:
             "pass", f"~{count} solar systems in PLZ {plz}",
             "Established solar area — permits clearly granted to neighbours.",
             "BNetzA Marktstammdatenregister", source_url,
+            source_type=source_type, confidence=confidence,
         )
     if count >= 5:
         return _make_check(
@@ -391,12 +539,14 @@ def _classify_mastr(count: int, plz: str, source_url: str) -> PermitCheck:
             "warn", f"~{count} solar systems in PLZ {plz}",
             "Early adopter area — solar is possible but less precedent locally.",
             "BNetzA Marktstammdatenregister", source_url,
+            source_type=source_type, confidence=confidence,
         )
     return _make_check(
         "solar_mastr", "solar", "Neighbourhood precedent",
         "warn", f"~{count} solar systems in PLZ {plz}",
         "Few solar installations found for this PLZ. Solar is still possible — check with local Bauamt.",
         "BNetzA Marktstammdatenregister", mastr_url,
+        source_type=source_type, confidence=confidence,
     )
 
 
@@ -420,7 +570,8 @@ def check_mastr(
             )
             rows = resp.json()
             if rows:
-                return _classify_mastr(int(rows[0]["count"]), plz, mastr_url)
+                return _classify_mastr(int(rows[0]["count"]), plz, mastr_url,
+                                       source_type="supabase_cache", confidence=0.85)
         except Exception:
             pass
 
@@ -439,7 +590,8 @@ def check_mastr(
             if not match:
                 match = re.search(r'total["\s]*:\s*(\d+)', resp.text, re.IGNORECASE)
             if match:
-                return _classify_mastr(int(match.group(1)), plz, mastr_url)
+                return _classify_mastr(int(match.group(1)), plz, mastr_url,
+                                       source_type="live_internet", confidence=0.8)
     except Exception:
         pass
 
@@ -459,7 +611,8 @@ def check_mastr(
             numbers = re.findall(r'\b(\d{1,5})\b', snippet)
             count = max((int(n) for n in numbers if 1 <= int(n) <= 50000), default=0)
             if count:
-                return _classify_mastr(count, plz, top_url)
+                return _classify_mastr(count, plz, top_url or mastr_url,
+                                       source_type="live_internet", confidence=0.5)
         except Exception:
             pass
 
@@ -468,6 +621,7 @@ def check_mastr(
         "warn", f"Solar count for PLZ {plz} unclear",
         "Could not query MaStR. Check manually if needed — this is a trust signal, not a permit check.",
         "BNetzA Marktstammdatenregister", mastr_url,
+        source_type="live_internet", confidence=0.2,
     )
 
 
@@ -484,6 +638,7 @@ def check_ev_parking(lat: float, lng: float, has_private_parking: bool) -> Permi
             "pass", "Private driveway / garage confirmed",
             "Wallbox can be installed at your private parking space.",
             "User input + OSM",
+            source_type="static_rule", confidence=0.9,
         )
 
     # Try OSM as secondary check
@@ -505,6 +660,7 @@ out 1;
                 "warn", "Possible private parking nearby (OSM)",
                 "OSM shows a parking area near your address. Confirm it's yours before ordering.",
                 "OpenStreetMap Overpass", "https://overpass-api.de",
+                source_type="live_internet", confidence=0.5,
             )
     except Exception:
         pass
@@ -514,6 +670,7 @@ out 1;
         "fail", "No private parking confirmed",
         "A wallbox requires a private driveway or garage. Street-only parking blocks installation.",
         "User input + OpenStreetMap Overpass",
+        source_type="static_rule", confidence=0.4,
     )
 
 
@@ -540,6 +697,7 @@ out 1;
                     "warn", "Apartment building — owner vote needed",
                     "Installation in a Mehrfamilienhaus requires a WEG owners' vote (§20 WEG). We assist with the process.",
                     "OpenStreetMap Overpass", "https://overpass-api.de",
+                    source_type="live_internet", confidence=0.6,
                 )
     except Exception:
         pass
@@ -549,6 +707,7 @@ out 1;
         "pass", "Single-family home",
         "No WEG vote required. Legal right to install confirmed (§554 BGB / homeowner).",
         "OpenStreetMap Overpass", "https://overpass-api.de",
+        source_type="live_internet", confidence=0.6,
     )
 
 
@@ -628,6 +787,7 @@ out 1;
                 "Neighbouring buildings within 8m. Heat pump outdoor unit must comply with TA Lärm (≤45 dB night). Choose a low-noise model (≤40 dB) and avoid north/east-facing garden walls.",
                 "TA Lärm (Technische Anleitung zum Schutz gegen Lärm)",
                 cited_clause="TA Lärm Nr. 6.1: Immissionsrichtwerte für Wohngebiete nachts 40 dB(A), tags 55 dB(A).",
+                source_type="live_internet", confidence=0.5,
             )
     except Exception:
         pass
@@ -638,6 +798,7 @@ out 1;
         "No immediately adjacent buildings detected. Standard heat pump outdoor unit installation is compliant with TA Lärm.",
         "TA Lärm (Technische Anleitung zum Schutz gegen Lärm)",
         cited_clause="TA Lärm Nr. 6.1: Immissionsrichtwerte für Wohngebiete nachts 40 dB(A).",
+        source_type="live_internet", confidence=0.5,
     )
 
 

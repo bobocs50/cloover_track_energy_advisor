@@ -43,9 +43,25 @@ class Settings(BaseSettings):
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
-        """Allow CORS_ORIGINS to be a comma-separated string in env."""
+        """Parse CORS_ORIGINS from env as either a JSON array or a comma-separated list.
+
+        Both `CORS_ORIGINS=http://localhost:5173,http://localhost:5180` and
+        `CORS_ORIGINS=["http://localhost:5173"]` are accepted. (NoDecode disables
+        pydantic-settings' own JSON decode, so without the JSON branch a `[...]`
+        value would be mis-split into one bogus origin that matches no browser.)
+        """
         if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
+            text = value.strip()
+            if text.startswith("["):
+                import json
+
+                try:
+                    parsed = json.loads(text)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except json.JSONDecodeError:
+                    pass
+            return [item.strip() for item in text.split(",") if item.strip()]
         return value
 
 

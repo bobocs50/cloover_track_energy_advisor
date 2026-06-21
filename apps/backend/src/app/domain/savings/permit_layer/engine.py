@@ -111,11 +111,11 @@ def _llm_summary(checks: list[PermitCheck], address: str, anthropic_api_key: str
         for c in checks
     )
     prompt = (
-        f"Schreibe einen kurzen, sachlichen Absatz auf Deutsch (2–3 Sätze) der die "
-        f"Genehmigungssituation für folgende Adresse zusammenfasst: {address}\n\n"
-        f"Prüfergebnisse:\n{results_text}\n\n"
-        "Stil: professionell, klar, kein Marketingsprech. Nenne konkret was genehmigt ist, "
-        "was geprüft werden muss und was (falls vorhanden) nicht möglich ist."
+        f"Write a short, factual paragraph in English (2–3 sentences) summarising the "
+        f"permit situation for the following address: {address}\n\n"
+        f"Check results:\n{results_text}\n\n"
+        "Style: professional, clear, no marketing speak. State specifically what is permitted, "
+        "what needs to be checked, and what (if anything) is not possible."
     )
     try:
         resp = httpx.post(

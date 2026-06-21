@@ -153,7 +153,7 @@ export default function HouseCanvas({ polygon, params, addons }: HouseCanvasProp
         minDistance={reach * 1.2}
         maxDistance={reach * 6}
         maxPolarAngle={Math.PI / 2.05}
-        target={[0, bounds.ridgeHeightM * 0.5 + 1.2, 0]}
+        target={[0, bounds.ridgeHeightM * 0.5 - 2.4, 0]}
       />
     </Canvas>
   );

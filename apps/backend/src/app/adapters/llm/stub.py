@@ -25,7 +25,7 @@ class StubAdvisor:
     Satisfies the number-assertion guard (AC2 / AC4).
     """
 
-    def explain(self, payload: dict[str, Any], locale: str = "de") -> dict[str, Any]:
+    def explain(self, payload: dict[str, Any], locale: str = "en") -> dict[str, Any]:
         """Return deterministic copy derived from payload numbers in the requested locale.
 
         The copy cites only figures present in the payload, so the guard
@@ -78,20 +78,17 @@ def _explain_de(payload: dict[str, Any]) -> dict[str, Any]:
     # Up-sell nudge (upsell_reason_md)
     upsell: dict[str, Any] = payload.get("upsell", {})
     delta = upsell.get("delta_eur_month", 0)
-    from_id = upsell.get("from_scenario_id", "")
-    to_id = upsell.get("to_scenario_id", "")
     upsell_reason_md = (
-        f"Das Upgrade von *{from_id}* auf *{to_id}* bringt zusätzlich "
-        f"€{delta:.0f}/mo — ein entscheidender Schritt zur vollen Energieautonomie."
+        f"Der letzte Ausbauschritt spart weitere **€{delta:.0f}/mo** "
+        f"— ein entscheidender Schritt zur vollen Energieautonomie."
     )
 
-    # Installer proposal copy (proposal_copy_md)
+    # Installer proposal copy (proposal_copy_md) — concise, letter-shaped.
     proposal_copy_md = (
-        f"**Ihr persönlicher Energieplan — Heimwende × Cloover**\n\n"
         f"Mit {label} sparen Sie **€{monthly_saving:.0f}/mo ab Tag eins** "
-        f"und **€{saving_after_payoff:.0f}/mo nach Kreditende**.\n"
-        f"Finanzierung ab €{installment:.0f}/mo "
-        f"(KfW-Förderung €{subsidy:.0f} abgezogen — Netto-Investition €{after_subsidy:.0f})."
+        f"— und **€{saving_after_payoff:.0f}/mo**, sobald die Finanzierung abbezahlt ist.\n\n"
+        f"Finanzierung ab €{installment:.0f}/mo, KfW-Förderung von €{subsidy:.0f} "
+        f"bereits abgezogen (Netto-Investition €{after_subsidy:.0f})."
     )
 
     return {
@@ -127,20 +124,17 @@ def _explain_en(payload: dict[str, Any]) -> dict[str, Any]:
     # Up-sell nudge (upsell_reason_md)
     upsell: dict[str, Any] = payload.get("upsell", {})
     delta = upsell.get("delta_eur_month", 0)
-    from_id = upsell.get("from_scenario_id", "")
-    to_id = upsell.get("to_scenario_id", "")
     upsell_reason_md = (
-        f"Upgrading from *{from_id}* to *{to_id}* adds another "
-        f"€{delta:.0f}/month — a decisive step toward full energy independence."
+        f"Adding the final upgrade saves another **€{delta:.0f}/month** "
+        f"— a decisive step toward full energy independence."
     )
 
-    # Installer proposal copy (proposal_copy_md)
+    # Installer proposal copy (proposal_copy_md) — concise, letter-shaped.
     proposal_copy_md = (
-        f"**Your personal energy plan — Heimwende × Cloover**\n\n"
         f"With {label} you save **€{monthly_saving:.0f}/month from day one** "
-        f"and **€{saving_after_payoff:.0f}/month after financing ends**.\n"
-        f"Financing from €{installment:.0f}/month "
-        f"(KfW grant of €{subsidy:.0f} deducted — net investment €{after_subsidy:.0f})."
+        f"— and **€{saving_after_payoff:.0f}/month** once the financing is paid off.\n\n"
+        f"Financing runs from €{installment:.0f}/month, with the KfW grant of "
+        f"€{subsidy:.0f} already deducted (net investment €{after_subsidy:.0f})."
     )
 
     return {
@@ -150,7 +144,7 @@ def _explain_en(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _minimal_copy(payload: dict[str, Any], locale: str = "de") -> dict[str, Any]:
+def _minimal_copy(payload: dict[str, Any], locale: str = "en") -> dict[str, Any]:
     """Absolute minimal copy that will always pass the guard."""
     best = payload.get("best", {})
     monthly_saving = best.get("monthly_saving_eur", 0)

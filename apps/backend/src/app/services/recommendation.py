@@ -13,15 +13,78 @@ response (§3.4 / AC7).
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from app.adapters.llm.base import AdvisorLLM, assert_numbers_grounded
 from app.adapters.llm.factory import make_advisor
 from app.adapters.resolver import Resolver
 from app.core.config import Settings, get_settings
-from app.domain.models import Household, Recommendation
+from app.domain.models import CarType, Household, Recommendation
 
 logger = logging.getLogger(__name__)
+
+# An existing heat pump is treated as "ageing" (a replacement-worthy efficiency
+# upgrade) above this age, mirroring the Layer-3 Case-B threshold documented on
+# Household.existing_heatpump_year in models.py.
+_AGEING_HEATPUMP_YEARS = 12
+_AGEING_HEATPUMP_SCOP = 3.0
+
+
+def _household_context(household: Household) -> dict[str, str]:
+    """Qualitative description of the household's current situation for the LLM.
+
+    This is prose-grounding context only — it lets the advisor reason about WHY
+    an upgrade fits (e.g. "your 2009 heat pump is ageing, so a replacement
+    qualifies for the KfW efficiency subsidy") rather than just restating the
+    saving figure.  Deliberately carries NO € amounts: the number-assertion
+    guard (§15) only validates €-prefixed tokens, so keeping money out of here
+    means the guard stays strict on the computed payload figures.
+    """
+    ctx: dict[str, str] = {}
+
+    ctx["building"] = (
+        f"{household.floor_area_m2} m² home built {household.building_year}, "
+        f"{household.occupants} occupant(s)"
+    )
+    ctx["heating"] = f"currently heats with {household.heating.fuel.value.lower()}"
+
+    if household.existing_heatpump_year is not None:
+        parts = [f"existing heat pump installed {household.existing_heatpump_year}"]
+        if household.existing_heatpump_scop is not None:
+            parts.append(f"SCOP {household.existing_heatpump_scop:g}")
+        if household.existing_heatpump_power_kw is not None:
+            parts.append(f"{household.existing_heatpump_power_kw:g} kW")
+        age = datetime.now().year - household.existing_heatpump_year
+        is_ageing = age >= _AGEING_HEATPUMP_YEARS or (
+            household.existing_heatpump_scop is not None
+            and household.existing_heatpump_scop < _AGEING_HEATPUMP_SCOP
+        )
+        verdict = (
+            "ageing/inefficient — replacing it qualifies for the KfW efficiency subsidy"
+            if is_ageing
+            else "modern and efficient"
+        )
+        ctx["existing_heat_pump"] = f"{', '.join(parts)} ({verdict})"
+
+    if household.existing_pv_kwp:
+        ctx["existing_solar"] = f"{household.existing_pv_kwp:g} kWp PV already installed"
+    if household.existing_battery_kwh:
+        ctx["existing_battery"] = (
+            f"{household.existing_battery_kwh:g} kWh battery already installed"
+        )
+
+    if household.existing_ev or household.mobility.kind == CarType.EV:
+        charger = "with a home wallbox" if household.existing_ev_charger else "no home wallbox yet"
+        ctx["mobility"] = f"already drives an EV ({charger})"
+    elif household.mobility.kind == CarType.NONE:
+        ctx["mobility"] = "no car"
+    else:
+        km = household.mobility.km_month
+        km_str = f", ~{km:g} km/mo" if km else ""
+        ctx["mobility"] = f"drives a {household.mobility.kind.value.lower()} car{km_str}"
+
+    return ctx
 
 
 class RecommendationService:
@@ -82,6 +145,10 @@ class RecommendationService:
         # ── LLM advisor + number guard ──────────────────────────────────
         advisor: AdvisorLLM = make_advisor(self._settings)
         payload = rec.model_dump()
+        # Qualitative situation context so the advisor can reason about WHY the
+        # upgrade fits this household (e.g. replacing an ageing heat pump for the
+        # subsidy), not just restate the figure.  Strings only → guard unaffected.
+        payload["household_context"] = _household_context(household)
         locale = household.locale
         copy = advisor.explain(payload, locale)
 
@@ -94,10 +161,23 @@ class RecommendationService:
 
             copy = StubAdvisor().explain(payload, locale)
 
+        # Overlay LLM tier rationales (qualitative, no € — the card shows figures).
+        # Falls through to the deterministic F27 template text when a key is absent
+        # (e.g. stub fallback or guard rejection), so cards always have copy.
+        new_tiers = [
+            tier.model_copy(
+                update={
+                    "rationale_md": copy.get(f"tier_rationale_{tier.id}", tier.rationale_md),
+                }
+            )
+            for tier in rec.tiers
+        ]
+
         rec = rec.model_copy(
             update={
                 "explanation_md": copy.get("explanation_md", rec.explanation_md),
                 "proposal_copy_md": copy.get("proposal_copy_md", rec.proposal_copy_md),
+                "tiers": new_tiers,
                 "upsell": rec.upsell.model_copy(
                     update={"reason_md": copy.get("upsell_reason_md", rec.upsell.reason_md)}
                 ),

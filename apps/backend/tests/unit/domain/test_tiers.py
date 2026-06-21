@@ -56,10 +56,11 @@ def test_returns_three_tiers_in_low_middle_high_order() -> None:
     assert [t.id for t in tiers] == ["low", "middle", "high"]
 
 
-def test_low_is_entry_high_is_full_bundle() -> None:
+def test_low_is_solar_battery_high_is_full_bundle() -> None:
+    # Starter bundles storage with the panels (solar+battery), not bare solar.
     tiers = build_tiers(_ladder(), term_months=180)
     low, _middle, high = tiers
-    assert low.scenario_id == "solar"
+    assert low.scenario_id == "solar-battery"
     assert high.scenario_id == "full-bundle"
 
 

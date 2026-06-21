@@ -1,6 +1,6 @@
 // Intake screen. Step flow:
 //   intake → zooming → roof-draw → roof-params → viewing (3D model + feed)
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { motion } from "framer-motion";
 import type { Map as MapboxMap } from "mapbox-gl";
 import GlobeBackground, { type GlobeHandle } from "@/components/globe-background";
@@ -10,17 +10,18 @@ import RoofDrawStep from "@/features/roof/RoofDrawStep";
 import RoofParamsStep, { type RoofParams } from "@/features/roof/RoofParamsStep";
 import HouseCanvas from "@/features/viewer/HouseCanvas";
 import type { ModuleKind } from "@/features/viewer/roofGeometry";
-import ActivityFeed, { type ActivityEvent } from "@/features/activity/ActivityFeed";
+import RunTimeline from "@/features/activity/RunTimeline";
 import {
   activeWorkerCount,
   applyEvent,
   initialRunState,
   simulateRecommendStream,
   toActivityEvent,
+  type ActivityEvent,
+  type LayerId,
   type PipelineEvent,
   type PipelineRunState,
 } from "@/features/activity/pipeline";
-import PipelineGraph from "@/features/activity/PipelineGraph";
 import OfferResultPage from "@/features/offer/OfferResultPage";
 import { demoOfferRecommendation } from "@/features/offer/demoOfferRecommendation";
 import type { LatLng } from "@/features/roof/useMapboxDraw";
@@ -29,10 +30,43 @@ import type { Household, Recommendation, Tier } from "@/lib/types";
 
 // Tier selector entries, ordered low → middle → high (matches Recommendation.tiers).
 const TIER_BUTTONS: { id: Tier["id"]; label: string }[] = [
-  { id: "low", label: "Low tier" },
-  { id: "middle", label: "Mid tier" },
-  { id: "high", label: "High tier" },
+  { id: "low", label: "Starter" },
+  { id: "middle", label: "Value" },
+  { id: "high", label: "Future-proof" },
 ];
+
+// The emotional framing for each tier — the "how it feels" the data alone can't
+// convey. The hard numbers + bundle copy come live from the selected Tier; this
+// only adds the customer-feeling headline and an accent color per rank.
+const TIER_INSIGHTS: Record<Tier["id"], { feeling: string; accent: string }> = {
+  low: {
+    feeling: "Dip a toe in — the lightest commitment, with room to grow later.",
+    accent: "#0284c7",
+  },
+  middle: {
+    feeling: "The comfortable middle — where most homeowners feel it's worth it.",
+    accent: "#2f6fed",
+  },
+  high: {
+    feeling: "All-in and future-proof — saving from day one, nothing left to add.",
+    accent: "#08744a",
+  },
+};
+
+// Strip the bundle emoji prefix (☀️🔋♨️🚗) from a Tier label for clean display.
+function stripBundleEmoji(value: string) {
+  return value.replace(/[☀️🔋♨️🚗]/gu, "").trim();
+}
+
+// Tidy LLM/demo prose for inline display: drop markdown bold and normalise the
+// "EUR" the backend emits into a real € sign.
+function cleanTierCopy(value: string) {
+  return value
+    .replace(/\*\*/g, "")
+    .replace(/EUR\s?/g, "€")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 const NO_ADDONS: Record<ModuleKind, boolean> = {
   pv: false,
@@ -102,8 +136,9 @@ function makeEvent(
   source: string,
   label: string,
   status: ActivityEvent["status"],
+  layerId: LayerId = "parent",
 ): ActivityEvent {
-  return { id: `ev-${eventSeq++}`, timestamp: clock(), source, label, status };
+  return { id: `ev-${eventSeq++}`, timestamp: clock(), source, label, status, layerId };
 }
 
 const ROOF_LABEL: Record<RoofParams["roofType"], string> = {
@@ -156,6 +191,12 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
     setAddons(addonsForTier(recommendation ?? demoOfferRecommendation, id));
   };
 
+  // The Tier object backing the selected button — live recommendation when it has
+  // arrived, otherwise the demo fallback so the panel always has content to show.
+  const activeTier = (recommendation ?? demoOfferRecommendation).tiers.find(
+    (t) => t.id === selectedTier,
+  );
+
   const handleHousehold = (h: Household) => {
     setHousehold(h);
     onComplete?.(h);
@@ -203,8 +244,9 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
     }
   };
 
-  // Release one buffered event, then schedule the next on a fast, slightly-jittered
-  // delay (~70–150ms) so reveals feel alive rather than mechanical.
+  // Release one buffered event, then schedule the next on a slightly-jittered
+  // delay (~98–210ms) so reveals feel alive rather than mechanical — paced so the
+  // stream stays readable before the run completes.
   const drainQueue = () => {
     const next = eventQueueRef.current.shift();
     if (!next) {
@@ -212,7 +254,7 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
       return;
     }
     applyEventRef.current(next);
-    const delay = 70 + Math.floor(Math.random() * 80);
+    const delay = 98 + Math.floor(Math.random() * 112);
     drainTimerRef.current = window.setTimeout(drainQueue, delay);
   };
 
@@ -240,13 +282,13 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
     setRunState(initialRunState());
     resetEventQueue();
     setEvents([
-      makeEvent("location", `${h.address.street} ${h.address.house_no} / ${h.plz}`, "ok"),
-      makeEvent("roof model", `${ROOF_LABEL[p.roofType].toLowerCase()} / ${p.pitchDeg}° pitch`, "ok"),
+      makeEvent("Location", `${h.address.street} ${h.address.house_no}, ${h.plz}`, "ok"),
+      makeEvent("Roof model", `${ROOF_LABEL[p.roofType]} · ${p.pitchDeg}° pitch`, "ok"),
     ]);
     postRecommendStream(h, enqueuePipelineEvent).catch(() => {
       setEvents((prev) => [
         ...prev,
-        makeEvent("monitor", "backend unreachable / replaying demo run", "warn"),
+        makeEvent("Monitor", "Backend unreachable — replaying demo run", "warn"),
       ]);
       void simulateRecommendStream(demoOfferRecommendation, enqueuePipelineEvent);
     });
@@ -273,6 +315,8 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
       <OfferResultPage
         rec={recommendation ?? demoOfferRecommendation}
         onBack={() => setShowOfferPage(false)}
+        events={events}
+        run={runState}
       />
     );
   }
@@ -331,6 +375,11 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
                   type="button"
                   onClick={() => selectTier(id)}
                   className={`viewer-tier-btn${selectedTier === id ? " viewer-tier-btn--on" : ""}`}
+                  style={
+                    selectedTier === id
+                      ? ({ "--tier-accent": TIER_INSIGHTS[id].accent } as CSSProperties)
+                      : undefined
+                  }
                   aria-pressed={selectedTier === id}
                 >
                   {label}
@@ -338,11 +387,7 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
               ))}
             </div>
 
-            <StatusPill
-              status={recStatus}
-              recommendation={recommendation}
-              onOpenOffer={() => setShowOfferPage(true)}
-            />
+            {activeTier && <TierInsight tier={activeTier} />}
           </motion.div>
           <motion.div
             className="viewer-feed"
@@ -350,10 +395,13 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
             animate={{ opacity: 1, x: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.7 }}
           >
-            <PipelineGraph state={runState} />
-            <div className="viewer-feed-scroll">
-              <ActivityFeed events={events} />
-            </div>
+            <RunTimeline
+              state={runState}
+              events={events}
+              status={recStatus}
+              recommendation={recommendation}
+              onOpenOffer={() => setShowOfferPage(true)}
+            />
           </motion.div>
         </div>
       )}
@@ -361,44 +409,47 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
   );
 }
 
-// Bottom-left status chip over the 3D stage (mirrors Pactum's status pill).
-function StatusPill({
-  status,
-  recommendation,
-  onOpenOffer,
-}: {
-  status: RecStatus;
-  recommendation: Recommendation | null;
-  onOpenOffer: () => void;
-}) {
-  if (status === "idle") return null;
-
-  const eur =
-    recommendation != null ? Math.round(recommendation.best.monthly_saving_eur) : null;
-
-  const config: Record<Exclude<RecStatus, "idle">, { dot: string; text: string }> = {
-    loading: { dot: "bg-[#d97706]", text: "Computing recommendation…" },
-    ready: {
-      dot: "bg-[#059669]",
-      text: eur != null ? `€${eur}/month possible` : "Recommendation ready",
-    },
-    error: { dot: "bg-[#dc2626]", text: "Recommendation failed" },
-  };
-  const c = config[status];
+// Floating panel under the tier bar that explains the selected offer — the
+// customer-feeling headline plus the two figures that matter (net today, after
+// payoff) and the live rationale. Re-keyed on tier id so it re-animates on switch.
+function TierInsight({ tier }: { tier: Tier }) {
+  const insight = TIER_INSIGHTS[tier.id];
+  const net = Math.round(tier.monthly_saving_eur);
+  const after = Math.round(tier.saving_after_payoff_eur);
 
   return (
-    <div className="viewer-status-pill">
-      <span
-        className={`h-2 w-2 rounded-full ${c.dot} ${status === "loading" ? "animate-pulse" : ""}`}
-      />
-      <span className="text-[13px] font-medium text-[var(--text-1)]">{c.text}</span>
-      <button
-        type="button"
-        onClick={onOpenOffer}
-        className="ml-2 rounded-full bg-[var(--accent)] px-3 py-1.5 text-[12px] font-bold text-white transition-[background-color,transform] duration-150 hover:bg-[#245ed1] active:scale-[0.97]"
-      >
-        {recommendation ? "View offers" : "Skip to offers"}
-      </button>
-    </div>
+    <motion.div
+      key={tier.id}
+      className="viewer-tier-panel"
+      style={{ "--tier-accent": insight.accent } as CSSProperties}
+      initial={{ opacity: 0, y: 6, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+    >
+      <div className="viewer-tier-panel-main">
+        <p className="viewer-tier-panel-name">{tier.name}</p>
+        <h3 className="viewer-tier-panel-title">{stripBundleEmoji(tier.label)}</h3>
+        <p className="viewer-tier-panel-feeling">{insight.feeling}</p>
+        <p className="viewer-tier-panel-rationale">{cleanTierCopy(tier.rationale_md)}</p>
+      </div>
+
+      <div className="viewer-tier-panel-stats">
+        <div className="viewer-tier-stat">
+          <span className="viewer-tier-stat-label">Net today</span>
+          <span
+            className="viewer-tier-stat-value"
+            data-tone={net >= 0 ? "pos" : "neg"}
+          >
+            {net >= 0 ? "+" : "−"}€{Math.abs(net)}/mo
+          </span>
+        </div>
+        <div className="viewer-tier-stat">
+          <span className="viewer-tier-stat-label">After payoff</span>
+          <span className="viewer-tier-stat-value" data-tone="pos">
+            +€{after}/mo
+          </span>
+        </div>
+      </div>
+    </motion.div>
   );
 }

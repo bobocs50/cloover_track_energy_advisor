@@ -6,7 +6,8 @@ Feature ID: F27 (three-strategy recommend) — dashboard offer view
 Pure: takes the cumulative ladder (alternatives[]) plus the financing term and
 returns exactly three Tier offers, designed to be displayed side-by-side:
 
-- ``low``    — cost-efficient entry (shallowest rung): cheapest, fastest payback.
+- ``low``    — cost-efficient entry: the ☀️+🔋 solar+battery rung (bundles storage
+               with the panels), falling back to bare solar on a 2-rung ladder.
 - ``middle`` — best-value milestone: strongest net monthly saving *below* the
                full bundle.
 - ``high``   — future-proof (deepest rung): the full bundle, headlined by the
@@ -39,12 +40,19 @@ def _lifetime_saving_eur(rung: ScenarioResult, term_months: int, horizon_months:
 def _select_indices(n: int) -> tuple[int, int, int]:
     """Pick (low, middle, high) rung indices from an n-rung ladder.
 
-    high = deepest bundle; low = entry rung; middle = a rung strictly between
-    when one exists.  Degrades gracefully for short ladders (the middle card may
-    coincide with another tier when fewer than three rungs exist).
+    high = deepest bundle; middle = a rung strictly between when one exists.
+
+    The Starter (low) tier bundles storage with the panels: it maps to the
+    ☀️+🔋 solar+battery rung (index 1) whenever the ladder is deep enough to keep
+    a distinct higher tier above it.  For a 2-rung ladder (household that already
+    has a heat pump *and* a charger, so solar+battery is itself the top rung) the
+    Starter degrades to bare solar so the three cards stay distinct.
+
+    Degrades gracefully for short ladders (the middle card may coincide with
+    another tier when fewer than three rungs exist).
     """
     high_i = n - 1
-    low_i = 0
+    low_i = 1 if n >= 3 else 0  # Starter = solar+battery when a higher tier exists
     if n >= 3:
         mid_i = n // 2  # the middle rung is resolved by net-saving below
     elif n == 2:
@@ -98,52 +106,52 @@ def build_tiers(alternatives: list[ScenarioResult], term_months: int) -> list[Ti
 
     low_tier = _tier(
         "low",
-        "Einstieg",
-        "Niedrigste Anfangsinvestition — solide Grundersparnis.",
+        "Starter",
+        "Lowest upfront investment — solid baseline savings.",
         low,
         headline_eur=low.saving_after_payoff_eur,
         headline_caption=(
-            f"€/Monat nach Tilgung · ab €{low.capex.after_subsidy_eur:,.0f} Investition"
+            f"€/month after payoff · from €{low.capex.after_subsidy_eur:,.0f} investment"
         ),
         rationale_md=(
-            f"Der günstigste Einstieg mit nur €{low.capex.after_subsidy_eur:,.0f} Kapitaleinsatz "
-            f"und €{low.installment_eur_month:.0f}/Monat Rate. Spart nach Tilgung dauerhaft "
-            f"€{low.saving_after_payoff_eur:.0f}/Monat — der risikoärmste Schritt in die Energiewende."
+            f"The most affordable entry point with just €{low.capex.after_subsidy_eur:,.0f} capital "
+            f"and a €{low.installment_eur_month:.0f}/month installment. After payoff it saves a steady "
+            f"€{low.saving_after_payoff_eur:.0f}/month — the lowest-risk step into the energy transition."
         ),
     )
 
     middle_tier = _tier(
         "middle",
-        "Bestes Preis-Leistungs-Verhältnis",
-        "Der Sweet Spot aus Investition und Ersparnis.",
+        "Best Value",
+        "The sweet spot between investment and savings.",
         middle,
         headline_eur=middle.saving_after_payoff_eur,
         headline_caption=(
-            f"€/Monat nach Tilgung · €{middle.capex.after_subsidy_eur:,.0f} Investition"
+            f"€/month after payoff · €{middle.capex.after_subsidy_eur:,.0f} investment"
         ),
         rationale_md=(
-            f"Das beste Preis-Leistungs-Verhältnis: für €{middle.capex.after_subsidy_eur:,.0f} "
-            f"dauerhaft €{middle.saving_after_payoff_eur:.0f}/Monat — über "
-            f"{LIFETIME_HORIZON_YEARS} Jahre rund "
-            f"€{_lifetime_saving_eur(middle, term_months, horizon_months):,.0f} Gesamtersparnis."
+            f"The best value for money: for €{middle.capex.after_subsidy_eur:,.0f} you get "
+            f"a steady €{middle.saving_after_payoff_eur:.0f}/month — around "
+            f"€{_lifetime_saving_eur(middle, term_months, horizon_months):,.0f} in total savings over "
+            f"{LIFETIME_HORIZON_YEARS} years."
         ),
     )
 
     high_lifetime = _lifetime_saving_eur(high, term_months, horizon_months)
     high_tier = _tier(
         "high",
-        "Zukunftssicher",
-        "Investition in die Zukunft — maximale Gesamtersparnis.",
+        "Future-proof",
+        "An investment in the future — maximum total savings.",
         high,
         headline_eur=high_lifetime,
         headline_caption=(
-            f"über {LIFETIME_HORIZON_YEARS} Jahre · danach €{high.saving_after_payoff_eur:.0f}"
-            f"/Monat dauerhaft"
+            f"over {LIFETIME_HORIZON_YEARS} years · then €{high.saving_after_payoff_eur:.0f}"
+            f"/month for life"
         ),
         rationale_md=(
-            f"Das volle Paket: rund €{high_lifetime:,.0f} Gesamtersparnis über "
-            f"{LIFETIME_HORIZON_YEARS} Jahre und danach dauerhaft "
-            f"€{high.saving_after_payoff_eur:.0f}/Monat — maximale Unabhängigkeit."
+            f"The full package: around €{high_lifetime:,.0f} in total savings over "
+            f"{LIFETIME_HORIZON_YEARS} years and then a steady "
+            f"€{high.saving_after_payoff_eur:.0f}/month — maximum independence."
         ),
     )
 

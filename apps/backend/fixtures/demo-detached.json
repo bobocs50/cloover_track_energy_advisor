@@ -136,25 +136,25 @@
   "tiers": [
     {
       "id": "low",
-      "name": "Einstieg",
-      "tagline": "Niedrigste Anfangsinvestition — solide Grundersparnis.",
-      "scenario_id": "pv-only",
-      "label": "☀️ Solar 9 kWp",
-      "capex_after_subsidy_eur": 13050.0,
-      "installment_eur_month": 103.0,
+      "name": "Starter",
+      "tagline": "Lowest upfront investment — solid baseline savings.",
+      "scenario_id": "pv-battery",
+      "label": "☀️ Solar + 🔋 Battery 8 kWh",
+      "capex_after_subsidy_eur": 18650.0,
+      "installment_eur_month": 147.0,
       "monthly_saving_eur": -24.0,
-      "saving_after_payoff_eur": 80.0,
+      "saving_after_payoff_eur": 124.0,
       "break_even_month": 180,
       "lifetime_years": 20,
-      "lifetime_saving_eur": 480.0,
-      "headline_eur": 80.0,
-      "headline_caption": "€/Monat nach Tilgung · ab €13,050 Investition",
-      "rationale_md": "Der günstigste Einstieg mit nur €13,050 Kapitaleinsatz und €103/Monat Rate. Spart nach Tilgung dauerhaft €80/Monat — der risikoärmste Schritt in die Energiewende."
+      "lifetime_saving_eur": 3120.0,
+      "headline_eur": 124.0,
+      "headline_caption": "€/month after payoff · from €18,650 investment",
+      "rationale_md": "The most affordable entry point with just €18,650 capital and a €147/month installment. After payoff it saves a steady €124/month — the lowest-risk step into the energy transition, bundling storage with the panels from day one."
     },
     {
       "id": "middle",
-      "name": "Bestes Preis-Leistungs-Verhältnis",
-      "tagline": "Der Sweet Spot aus Investition und Ersparnis.",
+      "name": "Best Value",
+      "tagline": "The sweet spot between investment and savings.",
       "scenario_id": "pv-battery-hp",
       "label": "☀️ Solar + 🔋 Battery + ♨️ Heat pump",
       "capex_after_subsidy_eur": 18650.0,
@@ -165,13 +165,13 @@
       "lifetime_years": 20,
       "lifetime_saving_eur": 13080.0,
       "headline_eur": 230.0,
-      "headline_caption": "€/Monat nach Tilgung · €18,650 Investition",
-      "rationale_md": "Das beste Preis-Leistungs-Verhältnis: für €18,650 dauerhaft €230/Monat — über 20 Jahre rund €13,080 Gesamtersparnis."
+      "headline_caption": "€/month after payoff · €18,650 investment",
+      "rationale_md": "The best value for money: for €18,650 you get a steady €230/month — around €13,080 in total savings over 20 years."
     },
     {
       "id": "high",
-      "name": "Zukunftssicher",
-      "tagline": "Investition in die Zukunft — maximale Gesamtersparnis.",
+      "name": "Future-proof",
+      "tagline": "An investment in the future — maximum total savings.",
       "scenario_id": "full-bundle",
       "label": "☀️ Solar + 🔋 Battery + ♨️ Heat pump + 🚗 EV charger",
       "capex_after_subsidy_eur": 31000.0,
@@ -182,8 +182,8 @@
       "lifetime_years": 20,
       "lifetime_saving_eur": 43440.0,
       "headline_eur": 43440.0,
-      "headline_caption": "über 20 Jahre · danach €364/Monat dauerhaft",
-      "rationale_md": "Das volle Paket: rund €43,440 Gesamtersparnis über 20 Jahre und danach dauerhaft €364/Monat — maximale Unabhängigkeit."
+      "headline_caption": "over 20 years · then €364/month for life",
+      "rationale_md": "The full package: around €43,440 in total savings over 20 years and then a steady €364/month — maximum independence."
     }
   ],
   "upsell": {
@@ -192,20 +192,122 @@
     "delta_eur_month": 144,
     "reason_md": "Going from PV+battery (−€24/mo) to the full bundle lands **+€120/mo** because you're still burning oil + petrol that the heat pump and EV charger displace. The EV charger alone adds +€124/mo by swapping petrol (€1.85/L) for cheap home charging (≈€0.20/kWh)."
   },
-  "explanation_md": "Ihr Haus ist ideal für das volle Paket: Die Wärmepumpe ersetzt Ihren Ölheizer und spart €106/mo brutto, der EV-Lader macht Ihr Auto deutlich günstiger als Benzin. Solar und Batterie decken tagsüber Ihren Eigenverbrauch und stabilisieren die Kosten langfristig gegen steigende Strompreise.",
-  "proposal_copy_md": "**Ihr persönlicher Energieplan — Heimwende × Cloover**\n\nMit dem vollen Paket (Solar 9 kWp · Batterie 8 kWh · Wärmepumpe · Wallbox) sparen Sie **€120/mo ab Tag eins** und **€364/mo nach Kreditende**. Finanzierung ab €244/mo (180 Mo., 5% p.a. nach KfW-Förderung).",
+  "explanation_md": "Your home is ideal for the full package: the heat pump replaces your oil heater and saves €106/mo gross, and the EV charger makes your car far cheaper to run than petrol. Solar and battery cover your daytime self-consumption and stabilise your costs long-term against rising electricity prices.",
+  "proposal_copy_md": "**Your personal energy plan — Heimwende × Cloover**\n\nWith the full package (solar 9 kWp · battery 8 kWh · heat pump · wallbox) you save **€120/mo from day one** and **€364/mo after the loan ends**. Financing from €244/mo (180 months, 5% p.a. after the KfW grant).",
   "assumptions": [
     {
-      "field": "specific_yield_kwh_per_kwp",
-      "value": "980 kWh/kWp",
-      "source": "PVGIS fallback (PLZ 10115)",
+      "field": "roof_area_usable_m2",
+      "value": "87 m²",
+      "source": "Google Solar rooftop model (footprint × pitch factor)",
+      "editable": false
+    },
+    {
+      "field": "pv_system_kwp",
+      "value": "9.0 kWp",
+      "source": "Sized to cover ~80% of annual demand (F06 engine)",
       "editable": true
     },
     {
-      "field": "kfw_subsidy_rate",
-      "value": "50%",
-      "source": "KfW 458 base 30% + Klima-Geschwindigkeitsbonus 20%",
+      "field": "panel_count",
+      "value": "20 panels (400 Wp mono-Si)",
+      "source": "Google Solar panel placement — dominant south segment",
+      "editable": false
+    },
+    {
+      "field": "roof_orientation",
+      "value": "South (azimuth 180°, tilt 32°)",
+      "source": "Google Solar dominant roof segment geometry",
+      "editable": false
+    },
+    {
+      "field": "specific_yield_kwh_per_kwp",
+      "value": "980 kWh/kWp",
+      "source": "PVGIS site-specific irradiance (PLZ 10115)",
       "editable": true
+    },
+    {
+      "field": "retail_price_eur_kwh",
+      "value": "0.37 EUR/kWh",
+      "source": "Destatis / BNetzA household electricity reference",
+      "editable": true
+    },
+    {
+      "field": "grid_fee_eur_kwh",
+      "value": "0.070 EUR/kWh",
+      "source": "Berliner Netzgesellschaft standard HT tariff",
+      "editable": true
+    },
+    {
+      "field": "autarky_pv_only",
+      "value": "30%",
+      "source": "F03 physics default §3.2 (typical Berlin roof, no battery)",
+      "editable": true
+    },
+    {
+      "field": "autarky_with_battery",
+      "value": "60%",
+      "source": "F03 physics default §3.2 (8 kWh battery)",
+      "editable": true
+    },
+    {
+      "field": "battery_capacity_kwh",
+      "value": "8 kWh",
+      "source": "F07 engine default: annual_kWh ÷ 1 000, clamped 5–10 kWh",
+      "editable": true
+    },
+    {
+      "field": "heat_pump_cop",
+      "value": "3.1 SCOP",
+      "source": "DIN EN 14511 / PHPP climate zone 4 (Berlin) — F08 §4.1",
+      "editable": true
+    },
+    {
+      "field": "kfw_458_hp_subsidy",
+      "value": "50% (cap €22 500)",
+      "source": "KfW 458 base 30% + Klima-Geschwindigkeitsbonus 20%",
+      "editable": false
+    },
+    {
+      "field": "vat_exemption_pv",
+      "value": "0% VAT on PV + battery",
+      "source": "§ 12 Abs. 3 UStG (Nullsteuersatz seit 01.01.2023)",
+      "editable": false
+    },
+    {
+      "field": "permit_monument_zone",
+      "value": "No heritage listing",
+      "source": "Denkmalschutz WMS (Berlin Senate) — live check",
+      "editable": false
+    },
+    {
+      "field": "permit_bebauungsplan",
+      "value": "No solar restriction",
+      "source": "Bebauungsplan lookup (Tavily + Claude) — live check",
+      "editable": false
+    },
+    {
+      "field": "mastr_neighbour_count",
+      "value": "47 systems in this PLZ",
+      "source": "Marktstammdatenregister (MaStR) — live query",
+      "editable": false
+    },
+    {
+      "field": "financing_apr",
+      "value": "4.5%",
+      "source": "Cloover standard financing rate",
+      "editable": true
+    },
+    {
+      "field": "financing_term_months",
+      "value": "180 months",
+      "source": "Cloover standard financing term",
+      "editable": true
+    },
+    {
+      "field": "climate_zone",
+      "value": "Zone 4 (Berlin)",
+      "source": "PHPP climate map / DIN EN ISO 15927",
+      "editable": false
     }
   ]
 }

@@ -43,11 +43,11 @@ export default function LandingPage({ onStart }: LandingPageProps) {
 
             <dl className="landing-metrics" aria-label="Planning highlights">
               <div>
-                <dt>4 layers</dt>
+                <dt>4 stages</dt>
                 <dd>Solar to mobility</dd>
               </div>
               <div>
-                <dt>15 min</dt>
+                <dt>1 min</dt>
                 <dd>First proposal</dd>
               </div>
               <div>

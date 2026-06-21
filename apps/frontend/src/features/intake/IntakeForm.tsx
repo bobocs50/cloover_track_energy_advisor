@@ -24,17 +24,29 @@ import {
   householdSchema,
 } from "@/features/intake/householdSchema";
 
+// Demo-ready preset — populates as many inputs as possible while keeping the
+// full 4-rung ladder (solar → +battery → +heat pump → +EV) so the Starter tier
+// stays ☀️ Solar + 🔋 Battery.
+//
+// Fossil (oil) heating keeps the heat-pump rung; a petrol car keeps the EV rung.
+// A small legacy PV + battery exercises the existing-equipment inputs — the
+// engine tops them up rather than re-selling from scratch.
+//
+// The heat-pump and EV-owned/wallbox fields are deliberately left off: this is
+// an oil-heated, petrol-driving home, so "already owns a heat pump / EV / charger"
+// would contradict the upgrade being sold and collapse the ladder (you can't
+// already own what we're installing).
 const DEFAULT_VALUES: HouseholdFormInput = {
   address: { street: "Am Nahholz", house_no: "54", city: "Buchen" },
   plz: "74722",
-  floor_area_m2: "",
-  building_year: "",
-  occupants: "",
-  electricity_eur_month: "",
-  heating: { fuel: "OIL", eur_month: "" },
-  mobility: { kind: "PETROL", km_month: "", eur_month: "" },
-  existing_pv_kwp: "",
-  existing_battery_kwh: "",
+  floor_area_m2: "140",
+  building_year: "1985",
+  occupants: "3",
+  electricity_eur_month: "132",
+  heating: { fuel: "OIL", eur_month: "176" },
+  mobility: { kind: "PETROL", km_month: "1233", eur_month: "" },
+  existing_pv_kwp: "2",
+  existing_battery_kwh: "4",
   existing_heatpump_year: "",
   existing_heatpump_power_kw: "",
   existing_heatpump_scop: "",

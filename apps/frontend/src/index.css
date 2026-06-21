@@ -119,22 +119,6 @@
     pointer-events: none;
   }
 
-  .viewer-status-pill {
-    position: absolute;
-    left: 24px;
-    bottom: 24px;
-    z-index: 2;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    border: 1px solid var(--border);
-    border-radius: 999px;
-    background: rgb(255 255 255 / 0.92);
-    box-shadow: var(--shadow-sm);
-    backdrop-filter: blur(8px);
-  }
-
   /* Toy module toggle bar — top-right over the 3D stage. The container is
      transparent to pointers so empty gaps don't steal orbit drags; only the
      chips themselves capture clicks. */
@@ -242,11 +226,119 @@
   }
 
   .viewer-tier-btn--on {
-    color: var(--text-1);
-    border-color: var(--text-1);
+    color: #fff;
+    border-color: var(--tier-accent, var(--text-1));
+    background: var(--tier-accent, var(--text-1));
     box-shadow:
-      0 0 0 1px var(--text-1),
-      var(--shadow-sm);
+      0 0 0 1px var(--tier-accent, var(--text-1)),
+      0 6px 16px -6px var(--tier-accent, rgb(17 24 39 / 0.5));
+  }
+
+  .viewer-tier-btn--on:hover {
+    color: #fff;
+    transform: translateY(-1px);
+    border-color: var(--tier-accent, var(--text-1));
+    filter: brightness(1.04);
+  }
+
+  /* Explainer for the selected tier — grounded in the stage's bottom-left so it
+     never floats over the 3D model. Content morphs in place on tier switch. */
+  .viewer-tier-panel {
+    position: absolute;
+    bottom: 24px;
+    left: 24px;
+    right: 24px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    padding: 22px 26px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--tier-accent, var(--text-1));
+    border-radius: 16px;
+    background: rgb(255 255 255 / 0.96);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 18px 40px -16px rgb(17 24 39 / 0.32);
+    pointer-events: auto;
+  }
+
+  .viewer-tier-panel-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .viewer-tier-panel-name {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--tier-accent, var(--text-3));
+  }
+
+  .viewer-tier-panel-title {
+    margin-top: 4px;
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+    color: var(--text-1);
+  }
+
+  .viewer-tier-panel-feeling {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  .viewer-tier-panel-stats {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 12px;
+  }
+
+  .viewer-tier-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 150px;
+    padding: 14px 20px;
+    border-radius: 14px;
+    background: var(--surface-2, #f3f5f8);
+  }
+
+  .viewer-tier-stat-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .viewer-tier-stat-value {
+    font-variant-numeric: tabular-nums;
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--text-1);
+  }
+
+  .viewer-tier-stat-value[data-tone="pos"] {
+    color: #08744a;
+  }
+
+  .viewer-tier-stat-value[data-tone="neg"] {
+    color: #a15c07;
+  }
+
+  .viewer-tier-panel-rationale {
+    margin-top: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--text-3);
   }
 
   .viewer-feed {
@@ -258,342 +350,673 @@
     border-left: 1px solid var(--border);
   }
 
-  .viewer-feed-scroll {
-    flex: 1 1 0;
-    min-height: 0;
-  }
-
-  /* ── Live pipeline mini-graph (icon-free, slash-marked) ───────────────── */
-  .pipeline-graph {
-    flex: 0 0 auto;
-    padding: 15px 18px 14px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .pl-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-  }
-
-  .pl-title {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--text-3);
-  }
-
-  .pl-meta {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-3);
-    font-variant-numeric: tabular-nums;
-    transition: color 240ms var(--ease-out-strong);
-  }
-
-  .pl-meta--live {
-    color: #b45309;
-    animation: pl-breathe 1.3s ease-in-out infinite;
-  }
-
-  .pl-rail-wrap {
-    position: relative;
-    margin-top: 12px;
-    padding-left: 4px;
-  }
-
-  /* Vertical rail + an animated fill that grows as stages resolve. */
-  .pl-rail {
-    position: absolute;
-    left: 4px;
-    top: 6px;
-    bottom: 6px;
-    width: 2px;
-    background: var(--border);
-    overflow: hidden;
-    border-radius: 2px;
-  }
-
-  .pl-rail-fill {
-    position: absolute;
-    inset: 0 0 auto 0;
-    width: 100%;
-    background: linear-gradient(#34d399, #059669);
-    transition: height 520ms var(--ease-out-strong);
-  }
-
-  .pl-rail-fill::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, transparent, rgb(255 255 255 / 0.6), transparent);
-    animation: pl-shimmer 1.6s ease-in-out infinite;
-  }
-
-  .pl-nodes {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding-left: 16px;
-  }
-
-  .pl-node {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 4px 8px 4px 4px;
-    border-radius: 8px;
-    transition: background 260ms var(--ease-out-strong);
-  }
-
-  .pl-node[data-kind="running"] {
-    background: #fffaf0;
-  }
-
-  .pl-node--branch {
-    margin-left: 14px;
-  }
-
-  .pl-node--branch::before {
-    content: "";
-    position: absolute;
-    left: -16px;
-    top: 50%;
-    width: 14px;
-    height: 2px;
-    background: var(--border);
-  }
-
-  .pl-mark {
-    flex: 0 0 auto;
-    width: 12px;
-    text-align: center;
-    font-weight: 800;
-    font-size: 14px;
-    line-height: 1;
-    color: var(--text-3);
-    transition:
-      color 260ms var(--ease-out-strong),
-      transform 260ms var(--ease-out-strong);
-  }
-
-  .pl-node[data-kind="running"] .pl-mark {
-    color: #d97706;
-    animation: pl-blink 1s ease-in-out infinite;
-  }
-  .pl-node[data-kind="ok"] .pl-mark {
-    color: #059669;
-    transform: scale(1.18);
-  }
-  .pl-node[data-kind="warn"] .pl-mark {
-    color: #d97706;
-  }
-  .pl-node[data-kind="err"] .pl-mark {
-    color: #dc2626;
-  }
-
-  .pl-label {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-2);
-    transition: color 260ms var(--ease-out-strong);
-  }
-
-  .pl-node[data-kind="ok"] .pl-label,
-  .pl-node[data-kind="running"] .pl-label {
-    color: var(--text-1);
-  }
-
-  .pl-status {
-    margin-left: auto;
-    font-size: 11px;
-    color: var(--text-3);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .pl-node[data-kind="running"] .pl-status {
-    color: #b45309;
-  }
-
-  /* ── Agent feed (icon-free, slash-marked) ─────────────────────────────── */
-  .agent-feed {
+  /* ── Unified run timeline ─────────────────────────────────────────────────
+     One cohesive panel: a connected vertical spine of pipeline stages, with the
+     active stage streaming live events and finished stages collapsed to a single
+     result line. Typography + status vocabulary echo the app shell and StepBar. */
+  .run-timeline {
     display: flex;
     height: 100%;
     flex-direction: column;
     background: #fff;
   }
 
-  .agent-feed-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: 16px 18px 12px;
+  .rt-head {
+    flex: 0 0 auto;
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid var(--border);
   }
 
-  .agent-feed-kicker {
+  .rt-kicker {
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.16em;
+    font-weight: 600;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--text-3);
   }
 
-  .agent-feed-title {
-    margin-top: 2px;
-    font-size: 15px;
+  .rt-head-running {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .rt-meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+    font-variant-numeric: tabular-nums;
+    transition: color 240ms var(--ease-out-strong);
+  }
+
+  .rt-meta--live {
+    color: var(--accent);
+    animation: rt-breathe 1.4s ease-in-out infinite;
+  }
+
+  /* Completed header: a green badge + the headline savings figure. */
+  .rt-head-done {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+
+  .rt-head-badge {
+    display: flex;
+    flex: 0 0 auto;
+    height: 26px;
+    width: 26px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--success);
+    color: #fff;
+    box-shadow: 0 0 0 4px var(--success-soft);
+  }
+
+  .rt-head-text {
+    min-width: 0;
+  }
+
+  .rt-headline {
+    margin-top: 1px;
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: -0.01em;
     color: var(--text-1);
   }
 
-  .agent-feed-count {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-3);
+  .rt-headline-lead {
+    color: var(--text-1);
+  }
+
+  .rt-headline-num {
     font-variant-numeric: tabular-nums;
   }
 
-  .agent-feed-body {
-    flex: 1 1 0;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 0 10px 16px;
+  .rt-headline-unit {
+    margin-left: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-2);
   }
 
-  .agent-feed-empty {
-    padding: 14px 10px;
-    font-size: 12.5px;
+  .rt-subline {
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
     color: var(--text-3);
   }
 
-  .agent-feed-list {
+  /* Slim progress meter under the header. */
+  .rt-track {
+    position: relative;
+    margin-top: 12px;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    overflow: hidden;
+  }
+
+  .rt-track-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .rt-track-fill[data-done] {
+    background: var(--success);
+  }
+
+  /* Scroll region holding the stage spine. */
+  .rt-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px 18px 20px;
+  }
+
+  .rt-stages {
     display: flex;
     flex-direction: column;
   }
 
-  .feed-row {
+  .rt-stage {
     display: flex;
-    gap: 10px;
-    padding: 9px 10px;
-    border-radius: 10px;
-    transition: background 160ms var(--ease-out-strong);
-    /* Entrance is handled by framer-motion (see ActivityFeed). */
+    gap: 12px;
+    align-items: stretch;
   }
 
-  .feed-row:hover {
-    background: var(--surface);
+  /* Spine column: status node at top, connector filling the rest of the row. */
+  .rt-spine {
+    display: flex;
+    flex: 0 0 20px;
+    flex-direction: column;
+    align-items: center;
   }
 
-  .feed-mark {
+  .rt-connector {
+    flex: 1 1 auto;
+    width: 2px;
+    min-height: 12px;
+    margin: 4px 0 0;
+    border-radius: 2px;
+    background: var(--border);
+    transition: background 360ms var(--ease-out-strong);
+  }
+
+  .rt-stage[data-kind="ok"] .rt-connector,
+  .rt-stage[data-kind="warn"] .rt-connector {
+    background: var(--success);
+  }
+
+  .rt-stage[data-kind="err"] .rt-connector {
+    background: var(--danger);
+  }
+
+  /* Status node — echoes the StepBar: ring (queued) → filled dot (running) →
+     check-circle (done). */
+  .rt-indicator {
+    display: flex;
     flex: 0 0 auto;
-    width: 12px;
-    padding-top: 1px;
-    text-align: center;
-    font-weight: 800;
-    font-size: 14px;
-    line-height: 1.3;
-    color: var(--text-3);
+    height: 20px;
+    width: 20px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: transparent;
+    border: 1.5px solid var(--border-strong);
+    color: #fff;
+    transition:
+      background 260ms var(--ease-out-strong),
+      border-color 260ms var(--ease-out-strong),
+      transform 260ms var(--ease-out-strong);
   }
 
-  .feed-row[data-status="ok"] .feed-mark {
-    color: #059669;
-  }
-  .feed-row[data-status="warn"] .feed-mark {
-    color: #dc2626;
-  }
-  .feed-row[data-status="info"] .feed-mark {
-    color: #2563eb;
-  }
-  .feed-row[data-status="loading"] .feed-mark {
-    color: #d97706;
-    animation: pl-blink 1s ease-in-out infinite;
+  .rt-indicator[data-kind="running"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
-  .feed-body {
-    min-width: 0;
+  .rt-indicator[data-kind="ok"] {
+    background: var(--success);
+    border-color: var(--success);
+  }
+
+  .rt-indicator[data-kind="warn"] {
+    background: var(--warning);
+    border-color: var(--warning);
+  }
+
+  .rt-indicator[data-kind="err"] {
+    background: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .rt-indicator-dot {
+    height: 7px;
+    width: 7px;
+    border-radius: 999px;
+    background: #fff;
+    animation: rt-breathe 1.15s ease-in-out infinite;
+  }
+
+  /* Stage body: title row, then either nested live events or a result line. */
+  .rt-stage-body {
     flex: 1 1 0;
+    min-width: 0;
+    padding-bottom: 16px;
   }
 
-  .feed-row-top {
+  .rt-stage:last-child .rt-stage-body {
+    padding-bottom: 2px;
+  }
+
+  .rt-stage-head {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 8px;
+    min-height: 20px;
   }
 
-  .feed-source {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 13px;
+  .rt-stage-label {
+    font-size: 13.5px;
     font-weight: 600;
     letter-spacing: -0.01em;
+    color: var(--text-3);
+    transition: color 260ms var(--ease-out-strong);
+  }
+
+  .rt-stage[data-kind="running"] .rt-stage-label,
+  .rt-stage[data-kind="ok"] .rt-stage-label,
+  .rt-stage[data-kind="warn"] .rt-stage-label,
+  .rt-stage[data-kind="err"] .rt-stage-label {
     color: var(--text-1);
   }
 
-  .feed-time {
+  .rt-stage-status {
     flex: 0 0 auto;
     font-size: 11px;
+    font-weight: 500;
     color: var(--text-3);
-    font-variant-numeric: tabular-nums;
   }
 
-  .feed-label {
-    margin-top: 1px;
+  .rt-stage[data-kind="running"] .rt-stage-status {
+    color: var(--accent);
+  }
+
+  .rt-stage-summary {
+    margin-top: 3px;
     font-size: 12.5px;
     line-height: 1.45;
     color: var(--text-2);
   }
 
-  @keyframes feed-row-in {
-    from {
-      opacity: 0;
-      transform: translateX(-6px);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
+  /* Nested live events under the active stage. */
+  .rt-events {
+    overflow: hidden;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
-  @keyframes pl-blink {
+  .rt-event {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: baseline;
+    column-gap: 8px;
+    padding: 3px 0;
+  }
+
+  .rt-event-source {
+    grid-column: 1;
+    grid-row: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  .rt-event-chip {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    background: var(--surface-2, rgba(127, 127, 127, 0.12));
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+
+  .rt-event-chip[data-source="live_internet"] {
+    color: var(--accent);
+  }
+
+  .rt-event-chip[data-source="seeded_fallback"] {
+    color: var(--warning);
+  }
+
+  .rt-event-time {
+    grid-column: 3;
+    grid-row: 1;
+    font-size: 10.5px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rt-event-label {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-3);
+  }
+
+  .rt-event-reason {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-3);
+    opacity: 0.78;
+  }
+
+  .rt-event[data-status="warn"] .rt-event-source {
+    color: var(--warning);
+  }
+
+  /* Permit category tree: nested checks grouped under each category heading. */
+  .rt-tree {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .rt-category-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text-2);
+    margin-bottom: 1px;
+  }
+
+  .rt-category .rt-events {
+    margin-top: 0;
+    padding-left: 10px;
+    border-left: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+  }
+
+  /* Cross-effect reasoning ("offer effect") under a resolved stage summary. */
+  .rt-stage-effect {
+    margin-top: 2px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--text-3);
+    opacity: 0.82;
+  }
+
+  /* ── Google Solar rich detail card ─────────────────────────────────────── */
+  .rt-solar {
+    margin-top: 9px;
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+    border-radius: 10px;
+    padding: 10px;
+    background: var(--surface-2, rgba(127, 127, 127, 0.04));
+  }
+
+  .rt-solar-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 7px;
+    background: linear-gradient(180deg, rgba(56, 189, 248, 0.1), rgba(56, 189, 248, 0));
+  }
+
+  .rt-solar-sun {
+    fill: #f59e0b;
+  }
+  .rt-solar-sun-ray {
+    stroke: #f59e0b;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+  .rt-solar-ray {
+    stroke: #f59e0b;
+    stroke-width: 1.2;
+    stroke-dasharray: 2.5 2.5;
+    opacity: 0.7;
+  }
+  .rt-solar-ground {
+    stroke: var(--text-3);
+    stroke-width: 1.4;
+    opacity: 0.5;
+  }
+  .rt-solar-wall {
+    stroke: var(--text-3);
+    stroke-width: 1.4;
+    opacity: 0.4;
+  }
+  .rt-solar-roof {
+    stroke: var(--accent);
+    stroke-width: 5;
+    stroke-linecap: round;
+  }
+  .rt-solar-arc {
+    fill: none;
+    stroke: var(--text-2);
+    stroke-width: 1.2;
+    opacity: 0.6;
+  }
+  .rt-solar-arc-label {
+    fill: var(--text-1);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rt-solar-grid {
+    margin-top: 9px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--border, rgba(127, 127, 127, 0.16));
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.16));
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .rt-solar-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 9px;
+    background: #fff;
+  }
+
+  .rt-solar-cell dt {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .rt-solar-cell dd {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-1);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rt-solar-note {
+    margin-top: 7px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-3);
+  }
+
+  /* ── Subsidy grant card ────────────────────────────────────────────────── */
+  .rt-subsidy {
+    margin-top: 9px;
+    border: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+    border-radius: 10px;
+    padding: 4px 10px;
+    background: var(--surface-2, rgba(127, 127, 127, 0.04));
+  }
+
+  .rt-grants {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rt-grant {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: baseline;
+    column-gap: 8px;
+    row-gap: 1px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.12));
+  }
+  .rt-grant:last-child {
+    border-bottom: none;
+  }
+
+  .rt-grant-code {
+    grid-column: 1;
+    grid-row: 1;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-radius: 4px;
+    padding: 1px 5px;
+    white-space: nowrap;
+  }
+
+  .rt-grant-name {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+
+  .rt-grant-value {
+    grid-column: 3;
+    grid-row: 1;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-1);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .rt-grant-rate {
+    grid-column: 2 / -1;
+    grid-row: 2;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .rt-grant-src {
+    grid-column: 2 / -1;
+    grid-row: 3;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    opacity: 0.8;
+  }
+  .rt-grant-src[data-live] {
+    color: var(--accent);
+    opacity: 1;
+  }
+
+  .rt-grant-total {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 0 7px;
+    border-top: 1px solid var(--border, rgba(127, 127, 127, 0.18));
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .rt-grant-total strong {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Pinned action footer — the run's status + CTA, docked at the panel base
+     (moved here from the floating pill over the 3D stage). */
+  .rt-foot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    border-top: 1px solid var(--border);
+    background: #fff;
+  }
+
+  .rt-cta {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--accent);
+    padding: 8px 13px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #fff;
+    cursor: pointer;
+    transition:
+      background-color 150ms var(--ease-out-strong),
+      transform 150ms var(--ease-out-strong);
+  }
+
+  .rt-cta:hover {
+    background: #245ed1;
+  }
+
+  .rt-cta:active {
+    transform: scale(0.97);
+  }
+
+  .rt-foot-status {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .rt-foot-dot {
+    flex: 0 0 auto;
+    height: 8px;
+    width: 8px;
+    border-radius: 999px;
+    background: var(--text-3);
+    transition: background 240ms var(--ease-out-strong);
+  }
+
+  .rt-foot[data-status="loading"] .rt-cta {
+    background: var(--text-3);
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .rt-foot[data-status="loading"] .rt-foot-dot {
+    background: var(--warning);
+    animation: rt-breathe 1.15s ease-in-out infinite;
+  }
+
+  .rt-foot[data-status="ready"] .rt-foot-dot {
+    background: var(--success);
+  }
+
+  .rt-foot[data-status="error"] .rt-foot-dot {
+    background: var(--danger);
+  }
+
+  .rt-foot-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-1);
+  }
+
+  @keyframes rt-breathe {
     0%,
     100% {
       opacity: 1;
     }
     50% {
-      opacity: 0.35;
-    }
-  }
-
-  @keyframes pl-breathe {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.55;
-    }
-  }
-
-  @keyframes pl-shimmer {
-    0% {
-      transform: translateY(-100%);
-    }
-    100% {
-      transform: translateY(100%);
+      opacity: 0.4;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .pl-meta--live,
-    .pl-node[data-kind="running"] .pl-mark,
-    .pl-rail-fill::after,
-    .feed-row[data-status="loading"] .feed-mark,
-    .feed-row {
+    .rt-meta--live,
+    .rt-indicator-dot {
       animation: none;
     }
   }
@@ -696,6 +1119,31 @@
       animation-duration: 0.001ms;
     }
     .roof-dot--waiting::after {
+      animation: none;
+    }
+  }
+
+  /* ─── Offer result page ──────────────────────────────────────
+     Seen once per flow (the payoff screen), so sections earn a gentle
+     staggered rise. translateY 10px, strong ease-out, never from scale(0).
+     (emil-design-eng) */
+  @keyframes offer-rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .offer-rise {
+    animation: offer-rise 460ms var(--ease-out-strong) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .offer-rise {
       animation: none;
     }
   }

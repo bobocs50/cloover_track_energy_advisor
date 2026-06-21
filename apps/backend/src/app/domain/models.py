@@ -146,9 +146,9 @@ class Household(BaseModel):
     heating: HeatingInput = Field(..., description="Current heating system details.")
     mobility: MobilityInput = Field(..., description="Current mobility profile.")
     locale: Literal["de", "en"] = Field(
-        default="de",
+        default="en",
         description=(
-            "Language for generated prose (UI chrome is localised client-side). Default German."
+            "Language for generated prose (UI chrome is localised client-side). Default English."
         ),
     )
 

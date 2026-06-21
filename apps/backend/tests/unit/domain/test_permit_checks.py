@@ -1,20 +1,18 @@
 """Unit tests for permit_layer checks — hardcoded rules need no HTTP mocking."""
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.domain.savings.permit_layer.checks import (
-    PermitCheck,
+    PERMIT_CATEGORY_ORDER,
     check_battery_install,
     check_battery_mastr,
-    check_denkmal_solar,
     check_denkmal_heatpump,
+    check_denkmal_solar,
     check_ev_parking,
     check_ev_weg,
     check_hp_geg,
     check_mastr,
+    group_by_category,
 )
-
 
 # ---------------------------------------------------------------------------
 # Hardcoded rules — no HTTP needed
@@ -231,3 +229,54 @@ def test_denkmal_heatpump_listed_is_warn_not_fail() -> None:
     # HP on listed building → warn (approval sometimes granted), NOT fail
     assert check.status == "warn"
     assert check.product == "heatpump"
+
+
+# ---------------------------------------------------------------------------
+# Check depth: category, source provenance, and reasoning fields
+# ---------------------------------------------------------------------------
+
+def test_static_check_carries_category_and_reasoning() -> None:
+    check = check_battery_install()
+    assert check.category == "Battery permissions"
+    assert check.source_type == "static_rule"
+    assert check.why_it_matters  # non-empty deterministic reasoning
+    assert check.offer_effect
+
+
+def test_source_type_reflects_origin() -> None:
+    # static rule (GEG) vs live internet (Denkmal WMS) vs supabase cache (MaStR)
+    geg = check_hp_geg(building_year=2000, fuel_type="GAS")
+    assert geg.source_type == "static_rule"
+
+    wms = MagicMock()
+    wms.json.return_value = {"features": []}
+    wms.raise_for_status.return_value = None
+    with patch("httpx.get", return_value=wms):
+        denkmal = check_denkmal_solar(lat=48.14, lng=11.58, bundesland="Bayern")
+    assert denkmal.source_type == "live_internet"
+    assert denkmal.confidence == 0.9
+
+    cache = MagicMock()
+    cache.json.return_value = [{"count": 67}]
+    cache.raise_for_status.return_value = None
+    with patch("httpx.get", return_value=cache):
+        mastr = check_mastr("74722", supabase_url="https://x.supabase.co", supabase_key="k")
+    assert mastr.source_type == "supabase_cache"
+
+
+def test_categories_map_to_canonical_set() -> None:
+    checks = [
+        check_battery_install(),
+        check_battery_mastr(),
+        check_hp_geg(building_year=2000, fuel_type="GAS"),
+    ]
+    for ch in checks:
+        assert ch.category in PERMIT_CATEGORY_ORDER
+
+
+def test_group_by_category_orders_and_omits_empty() -> None:
+    grouped = group_by_category(
+        [check_battery_install(), check_hp_geg(building_year=2000, fuel_type="GAS")]
+    )
+    # Canonical order preserved; empty categories (Location/Solar/EV) omitted.
+    assert list(grouped.keys()) == ["Heat pump permissions", "Battery permissions"]
