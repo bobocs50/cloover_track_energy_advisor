@@ -64,10 +64,20 @@ class RecommendationService:
                 )
             )
 
+        # Layer 5: resolve the live subsidy catalog (KfW/BAFA/VAT), mirroring the
+        # resolver→PricingContext pattern. Offline-safe — falls back to seed rows
+        # when Supabase is unconfigured, so the engine's KfW rate is data-driven.
+        from app.domain.savings.subsidy_layer.catalog import resolve_subsidies
+
+        subsidies = resolve_subsidies(
+            supabase_url=self._settings.supabase_url,
+            supabase_key=self._settings.supabase_service_role_key,
+        )
+
         # Engine call — pure F06-F11 ladder (resolver-injected ctx, zero I/O).
         from app.domain.savings.engine import recommend
 
-        rec: Recommendation = recommend(household, ctx)
+        rec: Recommendation = recommend(household, ctx, subsidies=subsidies)
 
         # ── LLM advisor + number guard ──────────────────────────────────
         advisor: AdvisorLLM = make_advisor(self._settings)
