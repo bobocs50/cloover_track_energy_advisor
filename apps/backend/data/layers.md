@@ -26,7 +26,7 @@ Output: `SiteCheckResponse { roof_ok, feasibility_flags[], energy_context, assum
 ---
 
 ## Layer 1 — Solar / PV (Electricity bucket)
-**File:** `domain/savings/electricity.py` → `layer1_solar()`
+**File:** `domain/savings/solar_layer/` (roof + sizing) · `domain/savings/electricity_layer.py` (meter math)
 **Status:** stub — raises `NotImplementedError` (F06)
 
 What to calculate:
@@ -59,7 +59,7 @@ Existing PV: credit incremental yield only — no double-count against current b
 ---
 
 ## Layer 2 — Battery (Electricity bucket — arbitrage)
-**File:** `domain/savings/electricity.py` → `layer2_battery()`
+**File:** `domain/savings/electricity_layer.py` → `battery_arbitrage_value()`
 **Status:** stub — raises `NotImplementedError` (F07)
 
 Builds on Layer 1's running state.
@@ -81,7 +81,7 @@ L2 €/mo += (extra_self_value + arbitrage_value) / 12
 ---
 
 ## Layer 3 — Heat Pump (Heating bucket)
-**File:** `domain/savings/heating.py` → `layer3_heatpump()`
+**File:** `domain/savings/heatpump_layer.py` → `compute_heating_baseline()`
 **Status:** stub — raises `NotImplementedError` (F08)
 
 Two cases depending on existing equipment (§3.2):
@@ -105,7 +105,7 @@ Case B KfW note: HP→HP replacement has no Klima-Geschwindigkeitsbonus → 30% 
 ---
 
 ## Layer 4 — EV Charger (Mobility bucket)
-**File:** `domain/savings/mobility.py` → `layer4_ev_charger()`
+**File:** `domain/savings/ev_layer.py` → `baseline_mobility_cost_year()` / `new_mobility_cost_year()`
 **Status:** stub — raises `NotImplementedError` (F09)
 
 Two cases:

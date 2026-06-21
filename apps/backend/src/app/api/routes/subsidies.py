@@ -11,8 +11,8 @@ from typing import Any
 from fastapi import APIRouter
 
 from app.core.config import get_settings
-from app.domain.savings.subsidis_layer.catalog import resolve_subsidies
-from app.domain.savings.subsidis_layer.crawler import refresh_federal
+from app.domain.savings.subsidy_layer.catalog import resolve_subsidies
+from app.domain.savings.subsidy_layer.crawler import refresh_federal
 
 router = APIRouter(prefix="/api/v1/advisor", tags=["subsidies"])
 

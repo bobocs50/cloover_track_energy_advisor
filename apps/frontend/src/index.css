@@ -135,7 +135,9 @@
     backdrop-filter: blur(8px);
   }
 
-  /* Toy module toggle bar — top-right over the 3D stage. */
+  /* Toy module toggle bar — top-right over the 3D stage. The container is
+     transparent to pointers so empty gaps don't steal orbit drags; only the
+     chips themselves capture clicks. */
   .viewer-module-bar {
     position: absolute;
     top: 20px;
@@ -146,9 +148,23 @@
     justify-content: flex-end;
     gap: 8px;
     max-width: 60%;
+    pointer-events: none;
+    animation: viewer-module-bar-in 420ms var(--ease-out-strong) both;
+  }
+
+  @keyframes viewer-module-bar-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 
   .viewer-module-chip {
+    pointer-events: auto;
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -172,6 +188,10 @@
   .viewer-module-chip:hover {
     transform: translateY(-1px);
     border-color: var(--text-3);
+  }
+
+  .viewer-module-chip:active {
+    transform: translateY(0) scale(0.97);
   }
 
   .viewer-module-chip--on {

@@ -9,9 +9,10 @@ All secret keys are loaded here from this app's env — never the frontend.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -30,7 +31,10 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
     google_solar_api_key: str = ""
     google_geocoding_api_key: str = ""
-    cors_origins: list[str] = ["http://localhost:5173"]
+    # NoDecode: stop pydantic-settings from JSON-decoding the raw env value for
+    # this list field. Without it, a plain `CORS_ORIGINS=http://localhost:5173`
+    # (not JSON) raises a SettingsError before the validator below can run.
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     app_env: str = "dev"
 
     @field_validator("cors_origins", mode="before")

@@ -63,6 +63,6 @@ Most of the savings ladder (electricity / heating / mobility / financing) is sti
 
 - `solar_layer/` — address → real Google Solar roof geometry + local irradiance → sized PV offers (Budget / Balanced / Max Independence), backtested against 1,062 real DE projects.
 - `permit_layer/` — 12 live German permit checks across solar / heat pump / EV / battery, streamed per-check over SSE (`GET /api/v1/advisor/permits/stream`). Sources: Denkmal WMS, Bebauungsplan (Tavily + Claude), MaStR neighbour count, OSM Overpass, and hardcoded GEG/LBO/TA-Lärm rules.
-- `subsidis_layer/` (F26, WIP) — official German subsidy catalog (KfW 458, BAFA, 0 % VAT, optional Länder grants) seeded in `subsidy_catalog` DB table; `catalog.py` queries it, `crawler.py` is the refresh stub.
+- `subsidy_layer/` (F26, WIP) — official German subsidy catalog (KfW 458, BAFA, 0 % VAT, optional Länder grants) seeded in `subsidy_catalog` DB table; `catalog.py` queries it, `crawler.py` is the refresh stub.
 
 The frontend's live flow is a 5-step state machine in `apps/frontend/src/features/intake/IntakeScreen.tsx`: address form → Mapbox flyTo → roof-polygon draw → roof params → 3D model (Three.js) + activity feed + `/recommend` call. The post-recommendation screens (`dashboard/`, `results/`, `configurator/`, `proposal/`) are built against the contract but **not yet wired into the flow**. See the frontend [CLAUDE.md](apps/frontend/CLAUDE.md) for the full layout.

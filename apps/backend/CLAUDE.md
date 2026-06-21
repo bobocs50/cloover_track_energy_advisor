@@ -49,7 +49,8 @@ src/app/
 │   └── savings/   # The savings ladder + the two real engines.
 │       ├── intake.py        # F05: normalise Household → NormalisedHousehold + assumptions[]
 │       ├── engine.py        # orchestrate the savings ladder (mostly stubs)
-│       ├── electricity/heating/mobility/financing/options/scenarios.py  # ladder stubs
+│       ├── electricity_layer/heatpump_layer/ev_layer.py  # Layer 2/3/4 bucket math
+│       ├── financing.py / options.py / scenarios.py / engine.py  # ladder orchestration
 │       ├── solar_layer/     # Layer 1 — Google Solar roof data → sized PV offers (see its INFO.md)
 │       │   ├── google_solar.py  # address → real roof geometry + local irradiance
 │       │   ├── pipeline.py      # sizing + physics + 3-offer generation engine
@@ -58,7 +59,7 @@ src/app/
 │       ├── permit_layer/    # Step 2 — 12 live permit checks (see its INFO.md)
 │       │   ├── checks.py        # 11 check fns (1 returns 2) → 12 PermitChecks
 │       │   └── engine.py        # ThreadPool fan-out → PermitMatrix + Supabase cache
-│       └── subsidis_layer/  # F26 — official subsidy catalog (KfW 458/BAFA/VAT/Länder)
+│       └── subsidy_layer/  # F26 — official subsidy catalog (KfW 458/BAFA/VAT/Länder)
 │           ├── catalog.py       # queries subsidy_catalog DB → SubsidyContext for F11
 │           └── crawler.py       # periodic refresh stub (🔶 stretch)
 ├── adapters/      # All external I/O. No business logic.
@@ -82,7 +83,7 @@ src/app/
 ```
 
 `solar_layer/` and `permit_layer/` are the two engines that actually run end-to-end today; the
-electricity/heating/mobility/financing ladder modules are still mostly stubs. Each engine has its
+electricity_layer/heatpump_layer/ev_layer ladder modules implement the bucket math. Each engine has its
 own `INFO.md` next to the code — read it before changing that engine.
 
 ### Key invariant: domain purity

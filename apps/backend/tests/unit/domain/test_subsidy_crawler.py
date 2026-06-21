@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.savings.subsidis_layer.crawler import (
+from app.domain.savings.subsidy_layer.crawler import (
     CrawlResult,
     _validate_gate,
     refresh_federal,

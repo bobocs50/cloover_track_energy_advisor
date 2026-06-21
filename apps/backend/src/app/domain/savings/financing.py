@@ -6,14 +6,17 @@ Feature ID: F11 (financing + confidence)
 
 from __future__ import annotations
 
-from typing import Any
 
+def annuity(principal: float, annual_rate: float, term_months: int) -> float:
+    """Monthly annuity installment for an amortising loan (spec §6).
 
-def annuity(principal: float, annual_rate: float, years: int) -> float:
-    """Monthly annuity installment for a loan. TODO F11."""
-    raise NotImplementedError("TODO F11: annuity")
-
-
-def apply_subsidies(capex: float, ctx: Any) -> float:
-    """Reduce capex by applicable subsidies. TODO F11."""
-    raise NotImplementedError("TODO F11: apply_subsidies")
+    At zero APR the installment is a flat linear repayment.
+    A zero principal produces a zero installment.
+    """
+    if principal == 0.0:
+        return 0.0
+    monthly_rate = annual_rate / 12
+    if monthly_rate == 0.0:
+        return principal / term_months
+    growth = (1.0 + monthly_rate) ** term_months
+    return principal * monthly_rate * growth / (growth - 1.0)

@@ -87,7 +87,7 @@ ENGINE (per user request)
 ## Files
 
 ```
-subsidis_layer/
+subsidy_layer/
 ├── catalog.py    — Subsidy + SubsidyContext dataclasses, resolve_subsidies(), components_for_intake()
 ├── crawler.py    — SOURCES, Tavily fetch, OpenAI extract, _validate_gate, refresh_federal()
 └── __init__.py   — public exports

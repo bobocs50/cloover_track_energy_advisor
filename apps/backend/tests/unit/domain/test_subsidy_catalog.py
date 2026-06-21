@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 
-from app.domain.savings.subsidis_layer.catalog import (
+from app.domain.savings.subsidy_layer.catalog import (
     SubsidyContext,
     Subsidy,
     components_for_intake,

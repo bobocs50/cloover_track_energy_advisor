@@ -29,6 +29,25 @@ const NO_ADDONS: Record<ModuleKind, boolean> = {
   ev: false,
 };
 
+// Cumulative savings-ladder order — mirrors Recommendation.alternatives[].
+const ADDON_LADDER: ModuleKind[] = ["pv", "battery", "heat_pump", "ev"];
+
+// Map the recommended scenario to the modules it implies. The ladder is
+// cumulative, so best === alternatives[n] means rungs 0..n are enabled.
+function seedFromRecommendation(rec: Recommendation): Record<ModuleKind, boolean> {
+  let idx = rec.alternatives.findIndex((a) => a.scenario_id === rec.best.scenario_id);
+  if (idx < 0) {
+    // Fallback: match by saving value if scenario_id doesn't line up.
+    idx = rec.alternatives.findIndex(
+      (a) => a.monthly_saving_eur === rec.best.monthly_saving_eur,
+    );
+  }
+  if (idx < 0) idx = rec.alternatives.length - 1; // default: full ladder
+  const next = { ...NO_ADDONS };
+  for (let i = 0; i <= idx && i < ADDON_LADDER.length; i++) next[ADDON_LADDER[i]] = true;
+  return next;
+}
+
 export interface IntakeScreenProps {
   onComplete?: (household: Household) => void;
 }
@@ -77,11 +96,15 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [recStatus, setRecStatus] = useState<RecStatus>("idle");
-  // Toy module toggles — always interactive; auto-seeded once in Phase 3.
+  // Toy module toggles — always interactive; auto-seeded once from the
+  // recommendation, but only if the user hasn't already touched them.
   const [addons, setAddons] = useState<Record<ModuleKind, boolean>>(NO_ADDONS);
+  const userTouchedAddons = useRef(false);
 
-  const toggleAddon = (kind: ModuleKind) =>
+  const toggleAddon = (kind: ModuleKind) => {
+    userTouchedAddons.current = true;
     setAddons((prev) => ({ ...prev, [kind]: !prev[kind] }));
+  };
 
   const handleHousehold = (h: Household) => {
     setHousehold(h);
@@ -125,6 +148,9 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
       .then((rec) => {
         setRecommendation(rec);
         setRecStatus("ready");
+        // Seed the toggles to match the recommended rung — once, and only if the
+        // user hasn't manually toggled anything yet.
+        if (!userTouchedAddons.current) setAddons(seedFromRecommendation(rec));
         const eur = Math.round(rec.best.monthly_saving_eur);
         setEvents((prev) => [
           ...prev.map((e) => (e.status === "loading" ? { ...e, status: "ok" as const } : e)),

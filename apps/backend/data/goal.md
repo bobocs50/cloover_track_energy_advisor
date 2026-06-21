@@ -44,17 +44,8 @@ The moment the address is confirmed, all layers fire in parallel.
 
 ## Steps
 
-- [ ] **Step 1 — Address Input + 3D Roof Render (Mapbox + Google Solar)**
+- [x] **Step 1 — Address Input with mapbox
 
-  User types their address. Mapbox autocomplete resolves street, house number, city, postcode.
-  On confirmation the map **zooms in** to the exact property. Google Solar API fires immediately — returns the actual roof geometry (segments, pitch, azimuth, shading) computed from satellite.
-
-  The roof renders in 3D on screen: panels populate the best south-facing segments in real time. Shaded areas marked red. Usable area green. A live kWp counter climbs as panels appear.
-
-  **This is not a generic illustration. It is their roof, their orientation, their shading.**
-  When a homeowner sees their own house with panels on it, the product stops feeling like a calculator and starts feeling like a decision.
-
-  While this renders: permit checks and savings engine fire in the background.
 
 - [x] **Step 2 — Permit Layer (Layer 0 — Site-Check)**
 

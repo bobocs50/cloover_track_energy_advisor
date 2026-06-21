@@ -563,23 +563,26 @@ export function moduleSlots(geo: HouseGeometry): Record<ModuleKind, ModuleSlot> 
       rotationY: 0, // orientation comes from the surface normal at render time
       surface: surf,
     },
-    // ♨️ Heat pump — on the ground against the +v long wall, near the −u end.
+    // All three ground/wall props live on the two camera-facing faces (south +v
+    // and east +u) so they read from the default view without orbiting.
+
+    // ♨️ Heat pump — on the ground in the yard off the +v (south) wall, −u end.
     heat_pump: {
       kind: "heat_pump",
-      position: fpPoint(fp, -0.35 * L, W + 0.8, 0),
+      position: fpPoint(fp, -0.45 * L, W + 0.9, 0),
       rotationY: facingY(fp.v), // fan faces +v, away from the house
     },
-    // 🔋 Battery — wall-mounted on the +u gable end, centred, bottom ~0.6 m up.
+    // 🔋 Battery — wall-mounted on the +u (east) wall, centred.
     battery: {
       kind: "battery",
-      position: fpPoint(fp, L, 0, 1.2),
+      position: fpPoint(fp, L, 0, 1.5),
       rotationY: facingY(fp.u),
     },
-    // 🚗 EV charger — wall-mounted on the −v front wall, near the +u corner.
+    // 🚗 EV charger — wall-mounted on the +v (south) wall, near the +u corner.
     ev: {
       kind: "ev",
-      position: fpPoint(fp, 0.6 * L, -W, 1.1),
-      rotationY: facingY({ x: -fp.v.x, z: -fp.v.z }),
+      position: fpPoint(fp, 0.55 * L, W, 1.4),
+      rotationY: facingY(fp.v),
     },
   };
 }

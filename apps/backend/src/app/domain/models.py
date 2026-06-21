@@ -5,7 +5,7 @@ specs/api/openapi.yaml exactly.  Once tooling is available, regenerate with:
 
     make gen-models
     (datamodel-codegen --input specs/api/openapi.yaml --input-file-type openapi
-                       --output apps/backend/src/app/domain/models.py)
+                       --output apps/api/src/app/domain/models.py)
 
 Owner: Zhou (backend) / Lukas (engine)
 Feature ID: F02 (contract) — F17 wires endpoints — F03/F05-F11 implement engine.
@@ -14,6 +14,7 @@ Feature ID: F02 (contract) — F17 wires endpoints — F03/F05-F11 implement eng
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -144,6 +145,12 @@ class Household(BaseModel):
     )
     heating: HeatingInput = Field(..., description="Current heating system details.")
     mobility: MobilityInput = Field(..., description="Current mobility profile.")
+    locale: Literal["de", "en"] = Field(
+        default="de",
+        description=(
+            "Language for generated prose (UI chrome is localised client-side). Default German."
+        ),
+    )
 
     # Existing-equipment fields (§3.2)
     existing_pv_kwp: float = Field(
