@@ -14,7 +14,7 @@ import {
 } from "@/features/intake/householdSchema";
 
 const DEFAULT_VALUES: HouseholdFormInput = {
-  address: { street: "Am Nahholz", house_no: "55", city: "Buchen" },
+  address: { street: "Am Nahholz", house_no: "54", city: "Buchen" },
   plz: "74722",
   floor_area_m2: "",
   building_year: "",
@@ -208,7 +208,7 @@ export default function IntakeForm({ onAddressPick, onComplete }: IntakeFormProp
       onAddressPick?.(match.lat, match.lon);
     } else if (
       data.address.street.trim().toLowerCase() === "am nahholz" &&
-      data.address.house_no.trim() === "55" &&
+      data.address.house_no.trim() === "54" &&
       data.plz.trim() === "74722"
     ) {
       onAddressPick?.(DEFAULT_HOUSE_COORDS.lat, DEFAULT_HOUSE_COORDS.lon);
@@ -299,7 +299,7 @@ export default function IntakeForm({ onAddressPick, onComplete }: IntakeFormProp
             <Field label="House no." htmlFor="house_no" error={errors.address?.house_no?.message}>
               <input
                 id="house_no"
-                placeholder="55"
+                placeholder="54"
                 className={inputClass(Boolean(errors.address?.house_no))}
                 {...register("address.house_no")}
               />
