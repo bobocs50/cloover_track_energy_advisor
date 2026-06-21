@@ -1060,8 +1060,7 @@
     color: #2f6fed;
   }
 
-  .landing-floating-card span,
-  .landing-caption {
+  .landing-floating-card span {
     display: block;
     color: #687385;
     font-size: 12px;
@@ -1080,6 +1079,7 @@
   }
 
   .landing-caption {
+    display: flex;
     right: 4%;
     bottom: 5%;
     border-radius: 999px;
