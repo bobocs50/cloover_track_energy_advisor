@@ -292,6 +292,7 @@ def _compute_confidence(
     offer_hp: bool,
     offer_ev: bool,
     heating_baseline: HeatingBaseline,
+    hp_rate: float,
 ) -> Confidence:
     """Evaluate low/high perturbations and return the confidence band.
 
@@ -390,11 +391,7 @@ def _compute_confidence(
         ev_gross = ctx2.wallbox_fixed_eur if offer_ev else 0.0
 
         if offer_hp:
-            rate = (
-                hp_subsidy_rate
-                if hp_subsidy_rate is not None
-                else (KFW_OLDHP if hb2.is_old_hp else KFW_FOSSIL)
-            )
+            rate = hp_subsidy_rate if hp_subsidy_rate is not None else hp_rate
             hp_net = hp_gross * (1.0 - rate)
         else:
             hp_net = 0.0
@@ -632,7 +629,7 @@ def build_ladder(
             hp_subsidy=layer_subsidy_eur
             if layer_bucket == "heating"
             else (
-                ctx.heatpump_fixed_eur * (KFW_OLDHP if is_old_hp else KFW_FOSSIL)
+                ctx.heatpump_fixed_eur * hp_rate
                 if ("heatpump" in scenario_id or scenario_id == "full-bundle") and offer_hp
                 else 0.0
             ),
@@ -726,7 +723,7 @@ def build_ladder(
                 "heating",
                 _capex_heatpump(
                     heatpump_fixed_eur=ctx.heatpump_fixed_eur,
-                    is_old_hp=is_old_hp,
+                    hp_rate=hp_rate,
                 ),
             )
         )
@@ -758,6 +755,7 @@ def build_ladder(
         offer_hp=offer_hp,
         offer_ev=offer_ev,
         heating_baseline=heating_baseline,
+        hp_rate=hp_rate,
     )
     results[best_idx] = best_result.model_copy(update={"confidence": conf})
 
