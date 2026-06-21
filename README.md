@@ -1,6 +1,6 @@
 <div align="center">
 
-# Heimwende Energy Advisor
+# Heimwende Energy Advisor | Overall 3rd Place Winner 🥇 Cloover Track Winner 🥇 | TechEurope Energy Hackathon
 
 **One number. How much your household saves per month after going all-electric.**
 
