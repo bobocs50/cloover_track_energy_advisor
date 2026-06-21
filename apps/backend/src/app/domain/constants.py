@@ -35,6 +35,10 @@ GAS_BOILER_EFFICIENCY: float = 0.90
 # HP offer threshold: age (years) above which old HP is considered for Case B
 HP_OFFER_AGE_THRESHOLD_YEARS: int = 12
 
+# Long-term horizon for the three-tier dashboard framing (high tier "invest in
+# the future"): cumulative net saving is projected over this many years.
+LIFETIME_HORIZON_YEARS: int = 20
+
 # Battery sizing clamp (kWh)
 BATTERY_MIN_KWH: float = 5.0
 BATTERY_MAX_KWH: float = 10.0

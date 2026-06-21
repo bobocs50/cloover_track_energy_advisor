@@ -26,6 +26,7 @@ build/
 # Build output
 dist/
 build/
+.vite/
 .next/
 out/
 .nuxt/

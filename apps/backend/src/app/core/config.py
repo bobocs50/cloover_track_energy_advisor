@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # (not JSON) raises a SettingsError before the validator below can run.
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
     app_env: str = "dev"
+    # Live-run demo throttle: ms of artificial delay between streamed pipeline events
+    # so each step is legible in the activity feed. 0 = off (real speed).
+    demo_pacing_ms: int = 0
 
     @field_validator("cors_origins", mode="before")
     @classmethod

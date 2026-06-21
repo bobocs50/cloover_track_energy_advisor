@@ -543,6 +543,95 @@ components:
           description: Plain-language payback summary for the honest-curve display.
           example: "€120/mo from day one; EV is the biggest single contributor"
 
+    Tier:
+      type: object
+      description: >
+        One of three packaged offers (low / middle / high) shown side-by-side on the dashboard,
+        derived from the cumulative ladder. low = cost-efficient entry; middle = best-value
+        milestone; high = full bundle headlined by the long-term (lifetime_years) cumulative
+        saving plus the permanent €/mo after payoff. scenario_id references a ScenarioResult in
+        alternatives[]; every € figure here is grounded in that ladder (never the LLM prose).
+      required:
+        - id
+        - name
+        - tagline
+        - scenario_id
+        - label
+        - capex_after_subsidy_eur
+        - installment_eur_month
+        - monthly_saving_eur
+        - saving_after_payoff_eur
+        - break_even_month
+        - lifetime_years
+        - lifetime_saving_eur
+        - headline_eur
+        - headline_caption
+        - rationale_md
+      properties:
+        id:
+          type: string
+          enum: [low, middle, high]
+          description: Tier rank.
+          example: high
+        name:
+          type: string
+          description: Marketing name for the tier card.
+          example: "Future-Proof"
+        tagline:
+          type: string
+          description: One-line pitch shown under the tier name.
+          example: "Invest in the future — maximum lifetime saving."
+        scenario_id:
+          type: string
+          description: ID of the ScenarioResult (in alternatives[]) this tier maps to.
+          example: "full-bundle"
+        label:
+          type: string
+          description: Human-readable bundle label.
+          example: "☀️ Solar + 🔋 Battery + ♨️ Heat pump + 🚗 EV charger"
+        capex_after_subsidy_eur:
+          type: number
+          description: Total capital after subsidies for this tier.
+          example: 28200
+        installment_eur_month:
+          type: number
+          description: Monthly loan installment for this tier.
+          example: 244
+        monthly_saving_eur:
+          type: number
+          description: Net monthly saving today (installment deducted). May be small/negative for low tier.
+          example: 137
+        saving_after_payoff_eur:
+          type: number
+          description: Permanent monthly saving once the loan is paid off.
+          example: 392
+        break_even_month:
+          type: integer
+          description: Month at which cumulative cash flow turns positive.
+          example: 118
+        lifetime_years:
+          type: integer
+          description: Horizon used for the long-term cumulative figure.
+          example: 20
+        lifetime_saving_eur:
+          type: number
+          description: >
+            Cumulative NET saving over lifetime_years: net saving during the loan plus
+            after-payoff saving for the remaining years. The high-tier headline.
+          example: 64000
+        headline_eur:
+          type: number
+          description: The single big number to feature on this tier's card.
+          example: 64000
+        headline_caption:
+          type: string
+          description: Short caption explaining what headline_eur represents.
+          example: "über 20 Jahre · danach €392/Monat dauerhaft"
+        rationale_md:
+          type: string
+          description: Markdown one-liner on why a household would pick this tier.
+          example: "Das volle Paket: höchste Gesamtersparnis und maximale Unabhängigkeit."
+
     Recommendation:
       type: object
       description: >
@@ -555,6 +644,7 @@ components:
       required:
         - best
         - alternatives
+        - tiers
         - upsell
         - current_monthly_spend_eur
         - explanation_md
@@ -568,6 +658,14 @@ components:
           description: The four cumulative ladder rungs in order (☀️→🔋→♨️→🚗).
           items:
             $ref: "#/components/schemas/ScenarioResult"
+          minItems: 1
+        tiers:
+          type: array
+          description: >
+            Three packaged offers (low / middle / high) derived from the ladder, shown
+            side-by-side on the dashboard. Always ordered low → middle → high.
+          items:
+            $ref: "#/components/schemas/Tier"
           minItems: 1
         upsell:
           $ref: "#/components/schemas/Upsell"

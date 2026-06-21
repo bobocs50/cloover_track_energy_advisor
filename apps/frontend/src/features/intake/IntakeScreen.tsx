@@ -1,6 +1,7 @@
 // Intake screen. Step flow:
 //   intake → zooming → roof-draw → roof-params → viewing (3D model + feed)
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import type { Map as MapboxMap } from "mapbox-gl";
 import GlobeBackground, { type GlobeHandle } from "@/components/globe-background";
 import StepBar from "@/components/StepBar";
@@ -10,16 +11,27 @@ import RoofParamsStep, { type RoofParams } from "@/features/roof/RoofParamsStep"
 import HouseCanvas from "@/features/viewer/HouseCanvas";
 import type { ModuleKind } from "@/features/viewer/roofGeometry";
 import ActivityFeed, { type ActivityEvent } from "@/features/activity/ActivityFeed";
+import {
+  activeWorkerCount,
+  applyEvent,
+  initialRunState,
+  simulateRecommendStream,
+  toActivityEvent,
+  type PipelineEvent,
+  type PipelineRunState,
+} from "@/features/activity/pipeline";
+import PipelineGraph from "@/features/activity/PipelineGraph";
+import OfferResultPage from "@/features/offer/OfferResultPage";
+import { demoOfferRecommendation } from "@/features/offer/demoOfferRecommendation";
 import type { LatLng } from "@/features/roof/useMapboxDraw";
-import { postRecommend } from "@/lib/api";
-import type { Household, Recommendation } from "@/lib/types";
+import { postRecommendStream } from "@/lib/api";
+import type { Household, Recommendation, Tier } from "@/lib/types";
 
-// Toggle bar entries, in savings-ladder order (3d_modules.md).
-const MODULE_TOGGLES: { kind: ModuleKind; emoji: string; label: string }[] = [
-  { kind: "pv", emoji: "☀️", label: "Solar" },
-  { kind: "battery", emoji: "🔋", label: "Battery" },
-  { kind: "heat_pump", emoji: "♨️", label: "Heat pump" },
-  { kind: "ev", emoji: "🚗", label: "EV charger" },
+// Tier selector entries, ordered low → middle → high (matches Recommendation.tiers).
+const TIER_BUTTONS: { id: Tier["id"]; label: string }[] = [
+  { id: "low", label: "Low tier" },
+  { id: "middle", label: "Mid tier" },
+  { id: "high", label: "High tier" },
 ];
 
 const NO_ADDONS: Record<ModuleKind, boolean> = {
@@ -29,19 +41,36 @@ const NO_ADDONS: Record<ModuleKind, boolean> = {
   ev: false,
 };
 
+// Default: show the full bundle so the live model lands fully kitted.
+const ALL_ADDONS: Record<ModuleKind, boolean> = {
+  pv: true,
+  battery: true,
+  heat_pump: true,
+  ev: true,
+};
+
+// Fallback household so the live pipeline always has a valid body to stream,
+// even if the intake form didn't produce a parsed Household.
+const DEMO_HOUSEHOLD: Household = {
+  address: { street: "Invalidenstraße", house_no: "116", city: "Berlin" },
+  plz: "10115",
+  floor_area_m2: 140,
+  building_year: 1985,
+  occupants: 3,
+  electricity_eur_month: 95,
+  heating: { fuel: "OIL", eur_month: 180 },
+  mobility: { kind: "PETROL", km_month: 1233 },
+};
+
 // Cumulative savings-ladder order — mirrors Recommendation.alternatives[].
 const ADDON_LADDER: ModuleKind[] = ["pv", "battery", "heat_pump", "ev"];
 
-// Map the recommended scenario to the modules it implies. The ladder is
-// cumulative, so best === alternatives[n] means rungs 0..n are enabled.
-function seedFromRecommendation(rec: Recommendation): Record<ModuleKind, boolean> {
-  let idx = rec.alternatives.findIndex((a) => a.scenario_id === rec.best.scenario_id);
-  if (idx < 0) {
-    // Fallback: match by saving value if scenario_id doesn't line up.
-    idx = rec.alternatives.findIndex(
-      (a) => a.monthly_saving_eur === rec.best.monthly_saving_eur,
-    );
-  }
+// Map a tier to the modules it implies. A tier points at a scenario in the
+// cumulative ladder, so selecting tier == alternatives[n] enables rungs 0..n.
+function addonsForTier(rec: Recommendation, tierId: Tier["id"]): Record<ModuleKind, boolean> {
+  const tier = rec.tiers.find((t) => t.id === tierId);
+  if (!tier) return ALL_ADDONS;
+  let idx = rec.alternatives.findIndex((a) => a.scenario_id === tier.scenario_id);
   if (idx < 0) idx = rec.alternatives.length - 1; // default: full ladder
   const next = { ...NO_ADDONS };
   for (let i = 0; i <= idx && i < ADDON_LADDER.length; i++) next[ADDON_LADDER[i]] = true;
@@ -94,16 +123,37 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
   const [household, setHousehold] = useState<Household | null>(null);
   const [params, setParams] = useState<RoofParams | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [runState, setRunState] = useState<PipelineRunState>(initialRunState());
   const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
   const [recStatus, setRecStatus] = useState<RecStatus>("idle");
-  // Toy module toggles — always interactive; auto-seeded once from the
-  // recommendation, but only if the user hasn't already touched them.
-  const [addons, setAddons] = useState<Record<ModuleKind, boolean>>(NO_ADDONS);
-  const userTouchedAddons = useRef(false);
+  const [showOfferPage, setShowOfferPage] = useState(false);
+  // The live 3D model shows the modules implied by the selected tier. Default to
+  // the high tier (full bundle) so the model lands fully kitted.
+  const [selectedTier, setSelectedTier] = useState<Tier["id"]>("high");
+  const selectedTierRef = useRef<Tier["id"]>("high");
+  const [addons, setAddons] = useState<Record<ModuleKind, boolean>>(ALL_ADDONS);
 
-  const toggleAddon = (kind: ModuleKind) => {
-    userTouchedAddons.current = true;
-    setAddons((prev) => ({ ...prev, [kind]: !prev[kind] }));
+  // Live-event pacing. Real backend events arrive in bursts — the solar worker and
+  // 12 permit checks land almost together over the SSE. We buffer them and release
+  // one at a time on a fast, slightly-randomized cadence so the feed *pops* in a
+  // lively "lots is happening" order instead of dumping a block. This only controls
+  // reveal *timing* — every event and every number is the real backend's.
+  const eventQueueRef = useRef<PipelineEvent[]>([]);
+  const drainTimerRef = useRef<number | null>(null);
+  const applyEventRef = useRef<(ev: PipelineEvent) => void>(() => {});
+
+  // Cleanup any pending drain timer on unmount.
+  useEffect(
+    () => () => {
+      if (drainTimerRef.current !== null) window.clearTimeout(drainTimerRef.current);
+    },
+    [],
+  );
+
+  const selectTier = (id: Tier["id"]) => {
+    selectedTierRef.current = id;
+    setSelectedTier(id);
+    setAddons(addonsForTier(recommendation ?? demoOfferRecommendation, id));
   };
 
   const handleHousehold = (h: Household) => {
@@ -134,52 +184,93 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
     setStep("roof-params");
   };
 
-  // Kick off the recommendation request and stream progress into the feed (4C).
-  const runRecommend = (h: Household, p: RoofParams) => {
-    setRecStatus("loading");
-    setEvents([
-      makeEvent("Location", `${h.address.street} ${h.address.house_no}, ${h.plz}`, "ok"),
-      makeEvent("Roof model", `${ROOF_LABEL[p.roofType]} · ${p.pitchDeg}° pitch`, "ok"),
-      makeEvent("Solar layer", "Computing roof yield…", "loading"),
-    ]);
-    // In DEV, use a golden fixture so we don't need a running backend.
-    const opts = import.meta.env.DEV ? { fixture: "demo-detached" } : undefined;
-    postRecommend(h, opts)
-      .then((rec) => {
+  // The reducer: fold one event into the feed + run state. Kept in a ref so the
+  // stable drain loop below always invokes the latest closure.
+  applyEventRef.current = (ev: PipelineEvent) => {
+    setRunState((prev) => applyEvent(prev, ev));
+    setEvents((prev) => [...prev, toActivityEvent(ev)]);
+    if (ev.type === "run_completed") {
+      const rec = ev.payload?.recommendation as Recommendation | undefined;
+      if (rec) {
         setRecommendation(rec);
         setRecStatus("ready");
-        // Seed the toggles to match the recommended rung — once, and only if the
-        // user hasn't manually toggled anything yet.
-        if (!userTouchedAddons.current) setAddons(seedFromRecommendation(rec));
-        const eur = Math.round(rec.best.monthly_saving_eur);
-        setEvents((prev) => [
-          ...prev.map((e) => (e.status === "loading" ? { ...e, status: "ok" as const } : e)),
-          makeEvent("Recommendation", `€${eur}/month potential savings`, "ok"),
-        ]);
-      })
-      .catch(() => {
-        setRecStatus("error");
-        setEvents((prev) => [
-          ...prev.map((e) => (e.status === "loading" ? { ...e, status: "warn" as const } : e)),
-          makeEvent("Error", "Recommendation failed — backend offline?", "warn"),
-        ]);
-      });
+        // Re-sync the model to the selected tier — the backend's tier→bundle
+        // mapping may differ from the demo fallback.
+        setAddons(addonsForTier(rec, selectedTierRef.current));
+      }
+    } else if (ev.type === "run_error") {
+      setRecStatus("error");
+    }
+  };
+
+  // Release one buffered event, then schedule the next on a fast, slightly-jittered
+  // delay (~70–150ms) so reveals feel alive rather than mechanical.
+  const drainQueue = () => {
+    const next = eventQueueRef.current.shift();
+    if (!next) {
+      drainTimerRef.current = null;
+      return;
+    }
+    applyEventRef.current(next);
+    const delay = 70 + Math.floor(Math.random() * 80);
+    drainTimerRef.current = window.setTimeout(drainQueue, delay);
+  };
+
+  // Stream sink: buffer the event and make sure the drain loop is running.
+  const enqueuePipelineEvent = (ev: PipelineEvent) => {
+    eventQueueRef.current.push(ev);
+    if (drainTimerRef.current === null) {
+      drainTimerRef.current = window.setTimeout(drainQueue, 0);
+    }
+  };
+
+  const resetEventQueue = () => {
+    eventQueueRef.current = [];
+    if (drainTimerRef.current !== null) {
+      window.clearTimeout(drainTimerRef.current);
+      drainTimerRef.current = null;
+    }
+  };
+
+  // Kick off the recommendation as a live SSE run and stream progress into the feed.
+  // Falls back to a simulated stream (golden fixture) if the backend is unreachable,
+  // so the live UI still works without a running backend.
+  const runRecommend = (h: Household, p: RoofParams) => {
+    setRecStatus("loading");
+    setRunState(initialRunState());
+    resetEventQueue();
+    setEvents([
+      makeEvent("location", `${h.address.street} ${h.address.house_no} / ${h.plz}`, "ok"),
+      makeEvent("roof model", `${ROOF_LABEL[p.roofType].toLowerCase()} / ${p.pitchDeg}° pitch`, "ok"),
+    ]);
+    postRecommendStream(h, enqueuePipelineEvent).catch(() => {
+      setEvents((prev) => [
+        ...prev,
+        makeEvent("monitor", "backend unreachable / replaying demo run", "warn"),
+      ]);
+      void simulateRecommendStream(demoOfferRecommendation, enqueuePipelineEvent);
+    });
   };
 
   const handleParamsNext = (p: RoofParams) => {
     setParams(p);
     setStep("viewing");
-    if (household) {
-      runRecommend(household, p);
-    } else {
-      // Defensive: household should be set from the intake form. Surface the gap
-      // in the feed rather than firing /recommend with no body.
-      setRecStatus("error");
-      setEvents([makeEvent("Error", "Household data missing — please restart", "warn")]);
-    }
+    // Always run the live pipeline. If the form didn't yield a parsed Household
+    // (e.g. a blank required field), fall back to the demo household so the live
+    // activity still streams rather than dead-ending on an error.
+    runRecommend(household ?? DEMO_HOUSEHOLD, p);
   };
 
   const formHidden = step !== "intake";
+
+  if (showOfferPage) {
+    return (
+      <OfferResultPage
+        rec={recommendation ?? demoOfferRecommendation}
+        onBack={() => setShowOfferPage(false)}
+      />
+    );
+  }
 
   return (
     <main className="intake-screen">
@@ -205,7 +296,12 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
 
       {step === "viewing" && params && (
         <div className="viewer-split">
-          <div className="viewer-stage">
+          <motion.div
+            className="viewer-stage"
+            initial={{ opacity: 0, scale: 0.985 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          >
             <div className="viewer-stage-header">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-3)]">
                 Live model
@@ -214,30 +310,46 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
                 {ROOF_LABEL[params.roofType]}
                 {params.roofType !== "flat" ? ` · ${params.pitchDeg}°` : ""}
               </h2>
+              {runState.status === "running" && activeWorkerCount(runState) > 1 && (
+                <span className="mt-1 block animate-pulse text-[12px] font-semibold text-[#b45309]">
+                  / {activeWorkerCount(runState)} checks running in parallel
+                </span>
+              )}
             </div>
 
             <HouseCanvas polygon={polygon} params={params} addons={addons} />
 
-            <div className="viewer-module-bar">
-              {MODULE_TOGGLES.map(({ kind, emoji, label }) => (
+            <div className="viewer-tier-bar" role="group" aria-label="Offer tier">
+              {TIER_BUTTONS.map(({ id, label }) => (
                 <button
-                  key={kind}
+                  key={id}
                   type="button"
-                  onClick={() => toggleAddon(kind)}
-                  className={`viewer-module-chip${addons[kind] ? " viewer-module-chip--on" : ""}`}
-                  aria-pressed={addons[kind]}
+                  onClick={() => selectTier(id)}
+                  className={`viewer-tier-btn${selectedTier === id ? " viewer-tier-btn--on" : ""}`}
+                  aria-pressed={selectedTier === id}
                 >
-                  <span aria-hidden>{emoji}</span>
                   {label}
                 </button>
               ))}
             </div>
 
-            <StatusPill status={recStatus} recommendation={recommendation} />
-          </div>
-          <div className="viewer-feed">
-            <ActivityFeed events={events} />
-          </div>
+            <StatusPill
+              status={recStatus}
+              recommendation={recommendation}
+              onOpenOffer={() => setShowOfferPage(true)}
+            />
+          </motion.div>
+          <motion.div
+            className="viewer-feed"
+            initial={{ opacity: 0, x: 44 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.7 }}
+          >
+            <PipelineGraph state={runState} />
+            <div className="viewer-feed-scroll">
+              <ActivityFeed events={events} />
+            </div>
+          </motion.div>
         </div>
       )}
     </main>
@@ -248,9 +360,11 @@ export default function IntakeScreen({ onComplete }: IntakeScreenProps) {
 function StatusPill({
   status,
   recommendation,
+  onOpenOffer,
 }: {
   status: RecStatus;
   recommendation: Recommendation | null;
+  onOpenOffer: () => void;
 }) {
   if (status === "idle") return null;
 
@@ -273,6 +387,13 @@ function StatusPill({
         className={`h-2 w-2 rounded-full ${c.dot} ${status === "loading" ? "animate-pulse" : ""}`}
       />
       <span className="text-[13px] font-medium text-[var(--text-1)]">{c.text}</span>
+      <button
+        type="button"
+        onClick={onOpenOffer}
+        className="ml-2 rounded-full bg-[var(--accent)] px-3 py-1.5 text-[12px] font-bold text-white transition-[background-color,transform] duration-150 hover:bg-[#245ed1] active:scale-[0.97]"
+      >
+        {recommendation ? "View offers" : "Skip to offers"}
+      </button>
     </div>
   );
 }

@@ -7,36 +7,18 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import type { ModuleSlot, RoofPlacementSurface } from "@/features/viewer/roofGeometry";
-
-/** Centroid of a list of [x,y,z] points. */
-function centroidOf(pts: readonly [number, number, number][]): [number, number, number] {
-  const s = pts.reduce(
-    (a, p) => [a[0] + p[0], a[1] + p[1], a[2] + p[2]] as [number, number, number],
-    [0, 0, 0] as [number, number, number],
-  );
-  return [s[0] / pts.length, s[1] / pts.length, s[2] / pts.length];
-}
+import type { ModuleSlot } from "@/features/viewer/roofGeometry";
 
 /**
  * One attached module. Positions to its slot anchor, plays a short drop +
- * scale-in on mount, then holds.
- *
- * `pv` is special: instead of a single body it lays a whole solar array flush on
- * the roof plane. The array works in the untransformed house frame (its panel
- * positions come straight from the roof-surface vertices), so the wrapper sits at
- * the roof centroid with no rotation — the scale-in then "blooms" from the centre
- * of the roof. Every other module is a single body rotated so its +z faces out.
+ * scale-in on mount, then holds. Every module is a single body rotated so its
+ * +z "front" faces outward (toward the default camera view).
  */
 export default function HouseModule({ slot }: { slot: ModuleSlot }) {
   const group = useRef<THREE.Group>(null);
   const t = useRef(0); // mount progress seconds
 
-  const isArray = slot.kind === "pv" && !!slot.surface;
-  const anchor = useMemo<[number, number, number]>(
-    () => (isArray ? centroidOf(slot.surface!.vertices) : slot.position),
-    [isArray, slot],
-  );
+  const anchor = slot.position;
 
   useFrame((_, delta) => {
     const g = group.current;
@@ -50,17 +32,8 @@ export default function HouseModule({ slot }: { slot: ModuleSlot }) {
   });
 
   return (
-    <group
-      ref={group}
-      position={anchor}
-      rotation={isArray ? [0, 0, 0] : [0, slot.rotationY, 0]}
-      scale={0.001}
-    >
-      {isArray ? (
-        <SolarArray surface={slot.surface!} center={anchor} />
-      ) : (
-        <ModuleBody slot={slot} />
-      )}
+    <group ref={group} position={anchor} rotation={[0, slot.rotationY, 0]} scale={0.001}>
+      <ModuleBody slot={slot} />
     </group>
   );
 }
@@ -70,6 +43,8 @@ export default function HouseModule({ slot }: { slot: ModuleSlot }) {
 // (local y=0), the wall slabs from their centre, so anchors stay put.
 function ModuleBody({ slot }: { slot: ModuleSlot }) {
   switch (slot.kind) {
+    case "pv":
+      return <GroundSolarArray />;
     case "heat_pump":
       return (
         <group scale={1.9}>
@@ -83,34 +58,21 @@ function ModuleBody({ slot }: { slot: ModuleSlot }) {
         </group>
       );
     case "ev":
-      return (
-        <group scale={2.0}>
-          <EvCharger />
-        </group>
-      );
+      return <EvBay />;
     default:
       return null;
   }
 }
 
-// ── ☀️ Solar array ─────────────────────────────────────────────────────────────
-// A grid of oversized glassy panels laid flush on the sun-facing roof plane. The
-// layout is derived from the roof surface's quad vertices: two adjacent edges
-// give the in-plane axes (eave + up-slope), and we tile the parallelogram with a
-// margin so the array fills ~88 % of the roof. Silver frames give it hard
-// contrast against the slate-blue roof; the glass shares one animated material
-// that "glints" on a slow sine.
-//
-// NOTE: this tiles the single sun-facing surface, which covers the roof type
-// shown in the demo. Per-roof-type layouts (gable's two planes, hip's four) are a
-// follow-up — see data/3d_modules.md.
-function SolarArray({
-  surface,
-  center,
-}: {
-  surface: RoofPlacementSurface;
-  center: [number, number, number];
-}) {
+// ── ☀️ Ground solar array ───────────────────────────────────────────────────────
+// A free-standing tilted rack of glassy panels in a single row, sitting on the
+// ground in the front yard (no roof, no cable). Fixed size — its height does NOT
+// scale with the house. Each panel tilts ~32° about the local x-axis so its low
+// (front) edge rests near the ground and the glass leans back-and-up to FACE the
+// viewer: the wrapper's rotationY (from moduleSlots) aims the rack's +z "front"
+// outward toward the default camera, and the +TILT pitch turns the glass to meet
+// it. Silver frames + an animated glassy glint echo the other modules. y=0 ground.
+function GroundSolarArray() {
   const glass = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
@@ -132,8 +94,16 @@ function SolarArray({
     [],
   );
   const busbar = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: "#11305a", roughness: 0.5 }),
+    [],
+  );
+  const strut = useMemo(
     () =>
-      new THREE.MeshStandardMaterial({ color: "#11305a", roughness: 0.5 }),
+      new THREE.MeshStandardMaterial({
+        color: "#9aa3ad",
+        roughness: 0.5,
+        metalness: 0.55,
+      }),
     [],
   );
   const t = useRef(0);
@@ -143,81 +113,82 @@ function SolarArray({
     glass.emissiveIntensity = 0.1 + 0.16 * (0.5 + 0.5 * Math.sin(t.current * 1.1));
   });
 
-  // Lay out the panel grid in the roof plane, relative to the group origin
-  // (the roof centroid `center`).
-  const panels = useMemo(() => {
-    const c = new THREE.Vector3(...center);
-    const v = surface.vertices.map((p) => new THREE.Vector3(...p));
-    // Two adjacent edges of the quad span the plane.
-    const edgeA = v[1].clone().sub(v[0]); // eave-ish
-    const edgeB = (v[3] ?? v[2]).clone().sub(v[0]); // up-slope-ish
-    const lenA = edgeA.length();
-    const lenB = edgeB.length();
-    const n = new THREE.Vector3(...surface.normal).normalize();
+  // Fixed panel + rack dimensions (metres) — never scaled by the house.
+  const PANELS = 6; // one row of six, facing the viewer
+  const PANEL_W = 0.86; // each panel's width along the row (x)
+  const PANEL_H = 1.5; // up the slope
+  const TH = 0.07; // panel thickness
+  const GAP = 0.07; // gap between adjacent panels
+  const TILT = (32 * Math.PI) / 180; // tilt about x so the glass faces the camera
+  const CLR = 0.06; // ground clearance under the low (front) edge
 
-    // Orthonormal panel basis: local +y = roof normal, +x along edgeA, +z in-plane.
-    const xAxis = edgeA.clone().normalize();
-    xAxis.sub(n.clone().multiplyScalar(n.dot(xAxis))).normalize();
-    const zAxis = new THREE.Vector3().crossVectors(n, xAxis).normalize();
-    const quat = new THREE.Quaternion().setFromRotationMatrix(
-      new THREE.Matrix4().makeBasis(xAxis, n, zAxis),
-    );
-    const q: [number, number, number, number] = [quat.x, quat.y, quat.z, quat.w];
+  // Geometry of the tilted plane. +TILT pitches each panel so its FRONT (+z,
+  // camera-side) edge drops near the ground and its BACK (−z) edge lifts — the
+  // glass normal swings from +y toward +z to meet the viewer. The slab centre
+  // rides half a slope-rise up so the front edge floats just off the grass.
+  const half = PANEL_H / 2;
+  const slabY = half * Math.sin(TILT) + CLR;
+  const frontZ = half * Math.cos(TILT); // low edge, toward camera (+z)
+  const backZ = -half * Math.cos(TILT); // high edge, toward house (−z)
 
-    // Oversized panels: aim for ~2.4 m cells, fill 88 % of the plane.
-    const m = 0.06; // margin fraction per side
-    const cols = Math.max(2, Math.round(lenA / 2.4));
-    const rows = Math.max(2, Math.round(lenB / 2.4));
-    const cellW = ((1 - 2 * m) * lenA) / cols;
-    const cellH = ((1 - 2 * m) * lenB) / rows;
-    const panelW = cellW * 0.9;
-    const panelH = cellH * 0.9;
-    const lift = 0.12;
+  // Back support legs reach from the ground up to each panel's high (back) edge.
+  const legTopY = PANEL_H * Math.sin(TILT) + CLR;
 
-    const out: {
-      key: string;
-      pos: [number, number, number];
-      panelW: number;
-      panelH: number;
-    }[] = [];
-    for (let i = 0; i < cols; i++) {
-      for (let j = 0; j < rows; j++) {
-        const s = m + ((i + 0.5) / cols) * (1 - 2 * m);
-        const tt = m + ((j + 0.5) / rows) * (1 - 2 * m);
-        const p = v[0]
-          .clone()
-          .add(edgeA.clone().multiplyScalar(s))
-          .add(edgeB.clone().multiplyScalar(tt))
-          .add(n.clone().multiplyScalar(lift))
-          .sub(c);
-        out.push({ key: `${i}-${j}`, pos: [p.x, p.y, p.z], panelW, panelH });
-      }
-    }
-    return { panels: out, q };
-  }, [surface, center]);
+  // Centre the row on x: panel i sits at xs[i].
+  const pitch = PANEL_W + GAP;
+  const xs = Array.from({ length: PANELS }, (_, i) => (i - (PANELS - 1) / 2) * pitch);
+  const railLen = (PANELS - 1) * pitch + PANEL_W + 0.18;
 
-  const TH = 0.16; // oversized panel thickness
+  // Two parallel rows separated along the slope axis (local z). The row footprint
+  // is ~PANEL_H·cos(TILT) deep; ROW_PITCH leaves a clear walkway between them. The
+  // pair straddles the anchor, so the array grows symmetrically into the yard.
+  const ROW_PITCH = 2.4;
+  const rowZs = [-ROW_PITCH / 2, ROW_PITCH / 2];
 
-  return (
-    <group>
-      {panels.panels.map(({ key, pos, panelW, panelH }) => (
-        <group key={key} position={pos} quaternion={panels.q}>
+  const renderRow = (rowZ: number) => (
+    <group key={rowZ} position={[0, 0, rowZ]}>
+      {/* Row of panels on the tilted plane, glass facing the camera. */}
+      {xs.map((x) => (
+        <group key={x} position={[x, slabY, 0]} rotation={[TILT, 0, 0]}>
           {/* Silver frame slab. */}
           <mesh material={frame} castShadow receiveShadow>
-            <boxGeometry args={[panelW, TH, panelH]} />
+            <boxGeometry args={[PANEL_W, TH, PANEL_H]} />
           </mesh>
-          {/* Glass face, inset and proud of the frame. */}
-          <mesh position={[0, TH * 0.55, 0]} material={glass} castShadow>
-            <boxGeometry args={[panelW * 0.9, TH * 0.5, panelH * 0.9]} />
+          {/* Glass face, proud of the frame (along the panel normal = +y). */}
+          <mesh position={[0, TH * 0.6, 0]} material={glass} castShadow>
+            <boxGeometry args={[PANEL_W * 0.9, TH * 0.5, PANEL_H * 0.9]} />
           </mesh>
           {/* Centre busbar for a touch of cell detail. */}
-          <mesh position={[0, TH * 0.83, 0]} material={busbar}>
-            <boxGeometry args={[panelW * 0.9, TH * 0.12, panelH * 0.04]} />
+          <mesh position={[0, TH * 0.9, 0]} material={busbar}>
+            <boxGeometry args={[PANEL_W * 0.9, TH * 0.12, PANEL_H * 0.04]} />
           </mesh>
         </group>
       ))}
+
+      {/* Rear support legs (one under each panel's high back edge). */}
+      {xs.map((x) => (
+        <mesh
+          key={`leg-${x}`}
+          material={strut}
+          position={[x, legTopY / 2, backZ * 0.55]}
+          castShadow
+        >
+          <boxGeometry args={[0.06, legTopY, 0.06]} />
+        </mesh>
+      ))}
+
+      {/* Front ground rail under the low (camera-side) edge. */}
+      <mesh material={strut} position={[0, 0.05, frontZ]} castShadow receiveShadow>
+        <boxGeometry args={[railLen, 0.1, 0.1]} />
+      </mesh>
+      {/* Rear ground rail tying the legs together. */}
+      <mesh material={strut} position={[0, 0.05, backZ]} castShadow receiveShadow>
+        <boxGeometry args={[railLen, 0.1, 0.1]} />
+      </mesh>
     </group>
   );
+
+  return <group>{rowZs.map(renderRow)}</group>;
 }
 
 // ── ♨️ Heat pump ───────────────────────────────────────────────────────────────
@@ -401,6 +372,156 @@ function EvCharger() {
       {/* Curled cable. */}
       <mesh geometry={cable} castShadow>
         <meshStandardMaterial color="#1b1f24" roughness={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+// ── 🚗 EV bay (wallbox + plugged-in car) ─────────────────────────────────────────
+// The "ev" module is one unit: the wallbox on the right-facing wall plus a modern
+// red electric car parked alongside it in the yard and a charge cable bridging the
+// two. Local frame (from the slot's rotationY = facingY(fp.u)): +z points outward
+// from the wall into the yard, the wall sits at z≈0, and local y=0 is 1.4 m up the
+// wall (the wallbox centre). The ground is therefore at local y ≈ −1.4.
+function EvBay() {
+  // Cable from the wallbox down to the car's wall-side charge port. Drawn in the
+  // bay frame so it spans the (separately scaled) charger and car cleanly.
+  const link = useMemo(() => {
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.16, -0.72, 0.16), // off the wallbox, lower edge
+      new THREE.Vector3(0.0, -1.06, 0.55), // sag toward the ground
+      new THREE.Vector3(-0.55, -1.0, 0.95),
+      new THREE.Vector3(-1.04, -0.74, 1.0), // into the car's charge port
+    ]);
+    return new THREE.TubeGeometry(curve, 32, 0.03, 8, false);
+  }, []);
+
+  return (
+    <group>
+      <group scale={2.0}>
+        <EvCharger />
+      </group>
+      {/* Car parked parallel to the wall, ~1.8 m out in the yard, wheels on the
+          ground (local y = −1.4). Its long axis runs along local x, so the
+          camera-facing (+z, outward) long side is the driver's side and the
+          wall-facing (−z) side carries the charge port. */}
+      <group position={[0, -1.4, 1.8]}>
+        <RedCar />
+      </group>
+      {/* Charge cable bridging wallbox → car port. */}
+      <mesh geometry={link} castShadow>
+        <meshStandardMaterial color="#15181c" roughness={0.75} />
+      </mesh>
+    </group>
+  );
+}
+
+// A compact modern electric car: smooth one-box body, glassy greenhouse, full-width
+// light bars front and rear, dark alloy wheels, and a glowing charge port on its
+// wall-facing (−z) side. Built at real-ish metres; length runs along local x.
+function RedCar() {
+  const port = useRef<THREE.MeshStandardMaterial>(null);
+  const t = useRef(0);
+
+  useFrame((_, delta) => {
+    t.current += delta;
+    if (port.current) {
+      // Breathe the charge-port glow to read as "charging".
+      port.current.emissiveIntensity = 0.5 + 0.5 * (0.5 + 0.5 * Math.sin(t.current * 1.8));
+    }
+  });
+
+  const LEN = 3.8; // along x
+  const WID = 1.78; // along z
+  const WR = 0.36; // wheel radius
+  const halfW = WID / 2;
+
+  // Four wheels: axis along z (rotate the cylinder's default +y axis onto z).
+  const wheels: [number, number][] = [
+    [LEN * 0.31, halfW - 0.02],
+    [LEN * 0.31, -(halfW - 0.02)],
+    [-LEN * 0.31, halfW - 0.02],
+    [-LEN * 0.31, -(halfW - 0.02)],
+  ];
+
+  return (
+    <group>
+      {/* Lower body. */}
+      <mesh position={[0, 0.62, 0]} castShadow receiveShadow>
+        <boxGeometry args={[LEN, 0.56, WID]} />
+        <meshStandardMaterial color="#d62828" roughness={0.32} metalness={0.5} />
+      </mesh>
+      {/* Hood / trunk taper — a slightly narrower deck for a modern profile. */}
+      <mesh position={[0, 0.92, 0]} castShadow receiveShadow>
+        <boxGeometry args={[LEN * 0.86, 0.18, WID * 0.9]} />
+        <meshStandardMaterial color="#c81f1f" roughness={0.32} metalness={0.5} />
+      </mesh>
+      {/* Rocker / lower skirt. */}
+      <mesh position={[0, 0.34, 0]} castShadow>
+        <boxGeometry args={[LEN * 0.97, 0.2, WID * 0.94]} />
+        <meshStandardMaterial color="#2a2d31" roughness={0.7} metalness={0.2} />
+      </mesh>
+      {/* Glassy greenhouse band (windshield + side windows). */}
+      <mesh position={[-0.12, 1.18, 0]} castShadow>
+        <boxGeometry args={[LEN * 0.5, 0.46, WID * 0.84]} />
+        <meshStandardMaterial
+          color="#10141a"
+          roughness={0.15}
+          metalness={0.4}
+          emissive="#1b2a3a"
+          emissiveIntensity={0.12}
+        />
+      </mesh>
+      {/* Body-colour roof cap. */}
+      <mesh position={[-0.12, 1.43, 0]} castShadow receiveShadow>
+        <boxGeometry args={[LEN * 0.44, 0.1, WID * 0.78]} />
+        <meshStandardMaterial color="#d62828" roughness={0.32} metalness={0.5} />
+      </mesh>
+      {/* Full-width front light bar (front = +x). */}
+      <mesh position={[LEN / 2 - 0.03, 0.72, 0]}>
+        <boxGeometry args={[0.06, 0.1, WID * 0.82]} />
+        <meshStandardMaterial
+          color="#eaf4ff"
+          emissive="#cfe6ff"
+          emissiveIntensity={0.9}
+          roughness={0.3}
+        />
+      </mesh>
+      {/* Full-width rear light bar. */}
+      <mesh position={[-LEN / 2 + 0.03, 0.74, 0]}>
+        <boxGeometry args={[0.06, 0.12, WID * 0.84]} />
+        <meshStandardMaterial
+          color="#7a0c12"
+          emissive="#ff2a2a"
+          emissiveIntensity={0.8}
+          roughness={0.3}
+        />
+      </mesh>
+      {/* Wheels — dark alloys, axis laid along z so they sit on the ground. */}
+      {wheels.map(([x, z], i) => (
+        <group key={i} position={[x, WR, z]} rotation={[Math.PI / 2, 0, 0]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[WR, WR, 0.26, 24]} />
+            <meshStandardMaterial color="#15171a" roughness={0.8} />
+          </mesh>
+          {/* Hub face. */}
+          <mesh position={[0, 0.14, 0]}>
+            <cylinderGeometry args={[WR * 0.55, WR * 0.55, 0.04, 16]} />
+            <meshStandardMaterial color="#9aa3ad" roughness={0.4} metalness={0.7} />
+          </mesh>
+        </group>
+      ))}
+      {/* Charge port on the wall-facing (−z) side, toward the rear. Glows while
+          the link cable plugs in. */}
+      <mesh position={[-LEN * 0.26, 0.74, -halfW - 0.01]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.09, 0.09, 0.04, 20]} />
+        <meshStandardMaterial
+          ref={port}
+          color="#0b3b52"
+          emissive="#46c8ff"
+          emissiveIntensity={0.7}
+          roughness={0.4}
+        />
       </mesh>
     </group>
   );

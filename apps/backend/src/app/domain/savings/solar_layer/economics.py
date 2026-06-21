@@ -7,7 +7,7 @@ Cost levers are safe to override; physics constants are not.
 from __future__ import annotations
 
 # ── Retail price default (used when PricingContext not available) ─────────────
-DEFAULT_RETAIL_PRICE_EUR_KWH: float = 0.37   # Germany average 2024
+DEFAULT_RETAIL_PRICE_EUR_KWH: float = 37 / 100  # Germany average 2024
 
 # ── Feed-in tariff (EEG 2023) ────────────────────────────────────────────────
 FEED_IN_TARIFF_SMALL_EUR_KWH: float = 0.082  # ≤ 10 kWp

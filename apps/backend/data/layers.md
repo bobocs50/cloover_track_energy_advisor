@@ -2,11 +2,32 @@
 
 Build order is fixed: each layer computes on the running state of the ones before it.
 
+## Pipeline status (no agentic orchestration — see `goal.md`)
+
+```
+1. address confirmed
+2. ┌──┴──┐  PARALLEL (slow HTTP, threads)
+   solar  permits
+3. ladder math  ── DETERMINISTIC, in sequence
+   L1 solar → L2 battery → L3 heatpump → L4 ev → financing → scenarios
+4. Recommendation  ── all NUMBERS finalised here (source of truth)
+5. LLM call  ── reads the finished numbers, writes the German proposal
+6. dashboard
+```
+
+- [x] **Layer 0 — Site-Check / Permits** — `adapters/site_check.py` + `permit_layer/` (12 live checks, SSE)
+- [x] **Layer 1 — Solar** — `solar_layer/` + `electricity_layer.py`, wired into `build_ladder`
+- [x] **Layer 2 — Battery** — `electricity_layer.py:battery_arbitrage_value`, wired
+- [x] **Layer 3 — Heat Pump** — `heatpump_layer.py:compute_heating_baseline`, wired
+- [x] **Layer 4 — EV Charger** — `ev_layer.py`, wired
+- [x] **Layer 5 — Subsidy catalog** — `subsidy_layer/catalog.py` → `SubsidyContext`, **now injected into the engine** (KfW rate is data-driven; crawler refresh is the stretch)
+- [x] **Recommendation → LLM proposal** — `engine.recommend` → `adapters/llm/`, runs end-to-end (full bundle ≈ €137/mo on the demo household)
+
 ---
 
 ## Layer 0 — Site-Check (Permits & Feasibility)
-**File:** `adapters/site_check.py`
-**Status:** stub — `SiteCheck.run()` raises `NotImplementedError` (F15)
+**File:** `adapters/site_check.py` · `domain/savings/permit_layer/`
+**Status:** ✅ implemented — `run_site_check()` live; `permit_layer` runs 12 checks over SSE
 
 Pre-step before the savings ladder. Validates the address/roof and returns per-product feasibility flags.
 
@@ -27,7 +48,7 @@ Output: `SiteCheckResponse { roof_ok, feasibility_flags[], energy_context, assum
 
 ## Layer 1 — Solar / PV (Electricity bucket)
 **File:** `domain/savings/solar_layer/` (roof + sizing) · `domain/savings/electricity_layer.py` (meter math)
-**Status:** stub — raises `NotImplementedError` (F06)
+**Status:** ✅ implemented & wired into `build_ladder` (F06)
 
 What to calculate:
 - How big a system fits on this roof (kWp)
@@ -60,7 +81,7 @@ Existing PV: credit incremental yield only — no double-count against current b
 
 ## Layer 2 — Battery (Electricity bucket — arbitrage)
 **File:** `domain/savings/electricity_layer.py` → `battery_arbitrage_value()`
-**Status:** stub — raises `NotImplementedError` (F07)
+**Status:** ✅ implemented & wired into `build_ladder` (F07)
 
 Builds on Layer 1's running state.
 
@@ -82,7 +103,7 @@ L2 €/mo += (extra_self_value + arbitrage_value) / 12
 
 ## Layer 3 — Heat Pump (Heating bucket)
 **File:** `domain/savings/heatpump_layer.py` → `compute_heating_baseline()`
-**Status:** stub — raises `NotImplementedError` (F08)
+**Status:** ✅ implemented & wired into `build_ladder` (F08)
 
 Two cases depending on existing equipment (§3.2):
 - **Case A** — fossil (OIL/GAS) → new HP
@@ -106,7 +127,7 @@ Case B KfW note: HP→HP replacement has no Klima-Geschwindigkeitsbonus → 30% 
 
 ## Layer 4 — EV Charger (Mobility bucket)
 **File:** `domain/savings/ev_layer.py` → `baseline_mobility_cost_year()` / `new_mobility_cost_year()`
-**Status:** stub — raises `NotImplementedError` (F09)
+**Status:** ✅ implemented & wired into `build_ladder` (F09)
 
 Two cases:
 - **Case A** — petrol/diesel → EV (fuel cost → cheap home charging)
@@ -128,11 +149,16 @@ Street-only parking (no wallbox possible) → Layer 4 not offered.
 
 ---
 
-## Layer 5 — Subsidy Crawler (Background refresh)
-**File:** `adapters/subsidy_crawler.py`
-**Status:** not started
+## Layer 5 — Subsidy catalog + Crawler
+**File:** `domain/savings/subsidy_layer/catalog.py` (request-time) · `crawler.py` (background refresh)
+**Status:** ✅ catalog wired into the engine — `resolve_subsidies()` builds a `SubsidyContext`
+that `engine.recommend()` injects so the KfW heat-pump rate is data-driven
+(`heat_pump_a` = 30% base + 20% speed bonus = 50%; `heat_pump_b` = 30%). 🔶 `crawler.refresh_federal()`
+(weekly Tavily+LLM refresh) is the stretch demo moment.
 
-Not a request-time layer — a weekly background job that keeps `subsidy_catalog` in Supabase fresh. At request time the Resolver reads the table; the engine never calls the crawler directly.
+Request-time path: `RecommendationService` calls `resolve_subsidies()` (reads `subsidy_catalog`,
+offline-safe seed fallback) → `SubsidyContext` → `engine.recommend(..., subsidies=ctx)`. The engine
+reads `combined_rate(component)`; it never imports a KfW constant when a context is injected.
 
 ```
 Cron: every 7 days

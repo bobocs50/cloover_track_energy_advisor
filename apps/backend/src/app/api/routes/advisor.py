@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.domain.models import (
     Household,
@@ -66,6 +67,32 @@ def recommend(
             status_code=500,
             detail=f"Recommendation failed: {exc!s}",
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# /recommend/stream  (live activity SSE)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/recommend/stream")
+def recommend_stream(
+    body: Household,
+    fixture: str | None = None,
+) -> StreamingResponse:
+    """Same pipeline as /recommend, streamed as SSE `PipelineEvent`s (live activity).
+
+    Emits one event per real step (resolve → ladder → subsidy → LLM → persist); the
+    terminal `run_completed` event carries the full Recommendation in `payload.recommendation`.
+    Read it with a fetch streaming reader (the body is a POST), not `EventSource`.
+    Use ?fixture=<id> to stream a canned sequence off a golden payload.
+    """
+    from app.services.run_stream import stream_recommendation
+
+    return StreamingResponse(
+        stream_recommendation(body, fixture=fixture),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ---------------------------------------------------------------------------

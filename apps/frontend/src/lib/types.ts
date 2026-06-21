@@ -245,6 +245,55 @@ export interface ScenarioResult {
   payback_note: string;
 }
 
+/**
+ * One of three packaged offers (low / middle / high) shown side-by-side on the
+ * dashboard, derived from the cumulative ladder.
+ *
+ * - low    — cost-efficient entry: cheapest, lowest capital at risk.
+ * - middle — best-value milestone: strongest saving below the full commitment.
+ * - high   — future-proof: the full bundle, headlined by the cumulative saving
+ *            over lifetime_years plus the permanent €/mo after payoff.
+ *
+ * scenario_id references a ScenarioResult in alternatives[]; the numeric fields
+ * are copied here so a dashboard card is self-contained. Every € figure is
+ * grounded in the ladder — never the LLM prose.
+ */
+export interface Tier {
+  /** Tier rank. */
+  id: "low" | "middle" | "high";
+  /** Marketing name for the tier card. */
+  name: string;
+  /** One-line pitch shown under the tier name. */
+  tagline: string;
+  /** ID of the ScenarioResult (in alternatives[]) this tier maps to. */
+  scenario_id: string;
+  /** Human-readable bundle label. */
+  label: string;
+  /** Total capital after subsidies for this tier. */
+  capex_after_subsidy_eur: number;
+  /** Monthly loan installment for this tier. */
+  installment_eur_month: number;
+  /** Net monthly saving today (installment deducted). May be small/negative for low tier. */
+  monthly_saving_eur: number;
+  /** Permanent monthly saving once the loan is paid off. */
+  saving_after_payoff_eur: number;
+  /** Month at which cumulative cash flow turns positive. */
+  break_even_month: number;
+  /** Horizon used for the long-term cumulative figure. */
+  lifetime_years: number;
+  /**
+   * Cumulative NET saving over lifetime_years: net saving during the loan plus
+   * after-payoff saving for the remaining years. The high-tier headline.
+   */
+  lifetime_saving_eur: number;
+  /** The single big number to feature on this tier's card. */
+  headline_eur: number;
+  /** Short caption explaining what headline_eur represents. */
+  headline_caption: string;
+  /** Markdown one-liner on why a household would pick this tier. */
+  rationale_md: string;
+}
+
 // ---------------------------------------------------------------------------
 // Response root
 // ---------------------------------------------------------------------------
@@ -267,6 +316,11 @@ export interface Recommendation {
   best: ScenarioResult;
   /** The four cumulative ladder rungs in order (☀️→🔋→♨️→🚗). */
   alternatives: ScenarioResult[];
+  /**
+   * Three packaged offers (low / middle / high) derived from the ladder, shown
+   * side-by-side on the dashboard. Always ordered low → middle → high.
+   */
+  tiers: Tier[];
   /** Incremental up-sell from the second-best to the best rung. */
   upsell: Upsell;
   /**

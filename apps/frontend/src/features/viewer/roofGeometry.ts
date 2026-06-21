@@ -122,6 +122,17 @@ function orientedFootprint(localPts: { x: number; z: number }[]): Footprint {
     [u, v] = [v, u];
     [halfLong, halfShort] = [halfShort, halfLong];
   }
+
+  // Canonicalize the axis signs toward the default camera (which sits in the
+  // +x / +z octant). The longest-edge direction is otherwise arbitrary, so the
+  // module-bearing faces (+v carries PV / heat pump / battery, +u carries the
+  // EV bay) would point away from the camera for ~half of drawn polygons. Pin
+  // +u to east and +v to south so the feature side always faces front. This
+  // matches the DEFAULT_FOOTPRINT (u east, v south), so undrawn houses are
+  // unaffected.
+  if (u.x < 0) u = { x: -u.x, z: -u.z };
+  if (v.z < 0) v = { x: -v.x, z: -v.z };
+
   return { halfLong, halfShort, u, v };
 }
 
@@ -494,7 +505,7 @@ export interface ModuleSlot {
   position: Vec3;
   /** Y-rotation (radians) so the module's +z "front" faces outward. */
   rotationY: number;
-  /** For roof-mounted modules (pv): the surface it lies on, for full tilt. */
+  /** Optional roof surface a module lies on (unused now PV is ground-mounted). */
   surface?: RoofPlacementSurface;
 }
 
@@ -513,31 +524,6 @@ function fpPoint(
   return [au * fp.u.x + av * fp.v.x, y, au * fp.u.z + av * fp.v.z];
 }
 
-/** Pick the roof surface whose aspect is closest to south (180°) for the panel. */
-function sunFacingSurface(surfaces: RoofPlacementSurface[]): RoofPlacementSurface {
-  let best = surfaces[0];
-  let bestDelta = Infinity;
-  for (const s of surfaces) {
-    // Angular distance to due south, in [0, 180].
-    const d = Math.abs(((s.azimuthDeg - 180 + 540) % 360) - 180);
-    if (d < bestDelta) {
-      bestDelta = d;
-      best = s;
-    }
-  }
-  return best;
-}
-
-/** Centroid of a polygon's vertices. */
-function centroid(verts: Vec3[]): Vec3 {
-  const s = verts.reduce(
-    (acc, [x, y, z]) => [acc[0] + x, acc[1] + y, acc[2] + z] as Vec3,
-    [0, 0, 0] as Vec3,
-  );
-  const n = verts.length;
-  return [s[0] / n, s[1] / n, s[2] / n];
-}
-
 /**
  * Resolve all four module anchors from the built house geometry. Positions scale
  * with the footprint; the toy renderer reads these and draws the props.
@@ -547,21 +533,17 @@ export function moduleSlots(geo: HouseGeometry): Record<ModuleKind, ModuleSlot> 
   const L = fp.halfLong;
   const W = fp.halfShort;
 
-  // ☀️ Solar panel — flat on the sun-facing roof plane, lifted 0.05 m off it.
-  const surf = sunFacingSurface(geo.surfaces);
-  const c = centroid(surf.vertices);
-  const pvPos: Vec3 = [
-    c[0] + surf.normal[0] * 0.05,
-    c[1] + surf.normal[1] * 0.05,
-    c[2] + surf.normal[2] * 0.05,
-  ];
-
   return {
+    // ☀️ Solar panel — free-standing tilted 6-panel ground row in the front yard,
+    // pushed ~3 m off the +v (south) wall so its depth clears the heat pump that
+    // hugs the wall at the −u end. Nudged toward +u so the row doesn't sit in
+    // front of the pump. Base on the ground (y=0); the tilt lives in the rack
+    // mesh. rotationY aims the rack's +z "front" outward (toward the camera) and
+    // the panels' +TILT turns the glass to face it.
     pv: {
       kind: "pv",
-      position: pvPos,
-      rotationY: 0, // orientation comes from the surface normal at render time
-      surface: surf,
+      position: fpPoint(fp, 0.45 * L, W + 3.6, 0),
+      rotationY: facingY(fp.v),
     },
     // All three ground/wall props live on the two camera-facing faces (south +v
     // and east +u) so they read from the default view without orbiting.
@@ -569,20 +551,24 @@ export function moduleSlots(geo: HouseGeometry): Record<ModuleKind, ModuleSlot> 
     // ♨️ Heat pump — on the ground in the yard off the +v (south) wall, −u end.
     heat_pump: {
       kind: "heat_pump",
-      position: fpPoint(fp, -0.45 * L, W + 0.9, 0),
+      position: fpPoint(fp, -0.35 * L, W + 0.9, 0),
       rotationY: facingY(fp.v), // fan faces +v, away from the house
     },
-    // 🔋 Battery — wall-mounted on the +u (east) wall, centred.
+    // 🔋 Battery — wall-mounted on the +v (south) wall, pushed to the −u end so it
+    // sits to the left of the heat pump (which stands on the ground at −0.45 L of
+    // the same wall). Both read together on the default camera-facing south face.
     battery: {
       kind: "battery",
-      position: fpPoint(fp, L, 0, 1.5),
-      rotationY: facingY(fp.u),
+      position: fpPoint(fp, -0.81 * L, W, 1.5),
+      rotationY: facingY(fp.v),
     },
-    // 🚗 EV charger — wall-mounted on the +v (south) wall, near the +u corner.
+    // 🚗 EV charger — wall-mounted on the +u (east / right-facing) short wall,
+    // centred along it, so it lives on the side of the house rather than the
+    // camera-facing south front. Faces +u, away from the house.
     ev: {
       kind: "ev",
-      position: fpPoint(fp, 0.55 * L, W, 1.4),
-      rotationY: facingY(fp.v),
+      position: fpPoint(fp, L, 0, 1.4),
+      rotationY: facingY(fp.u),
     },
   };
 }

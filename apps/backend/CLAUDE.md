@@ -46,11 +46,12 @@ src/app/
 ├── domain/        # Pure-ish — engine logic. Input: Household + PricingContext → Recommendation.
 │   ├── models.py  # Frozen Pydantic v2 contract (F02). Source of truth for all types.
 │   ├── constants.py  # Physics constants only. Monetary values go in PricingContext.
-│   └── savings/   # The savings ladder + the two real engines.
+│   └── savings/   # The savings ladder — now runs end-to-end.
 │       ├── intake.py        # F05: normalise Household → NormalisedHousehold + assumptions[]
-│       ├── engine.py        # orchestrate the savings ladder (mostly stubs)
-│       ├── electricity_layer/heatpump_layer/ev_layer.py  # Layer 2/3/4 bucket math
-│       ├── financing.py / options.py / scenarios.py / engine.py  # ladder orchestration
+│       ├── engine.py        # recommend(): orchestrate the ladder → Recommendation (live)
+│       ├── electricity_layer/heatpump_layer/ev_layer.py  # Layer 1-4 bucket math (live)
+│       ├── tiers.py         # F27: build_tiers() → 3 dashboard offers (low/middle/high)
+│       ├── financing.py / options.py / scenarios.py  # ladder orchestration (build_ladder)
 │       ├── solar_layer/     # Layer 1 — Google Solar roof data → sized PV offers (see its INFO.md)
 │       │   ├── google_solar.py  # address → real roof geometry + local irradiance
 │       │   ├── pipeline.py      # sizing + physics + 3-offer generation engine
@@ -60,7 +61,7 @@ src/app/
 │       │   ├── checks.py        # 11 check fns (1 returns 2) → 12 PermitChecks
 │       │   └── engine.py        # ThreadPool fan-out → PermitMatrix + Supabase cache
 │       └── subsidy_layer/  # F26 — official subsidy catalog (KfW 458/BAFA/VAT/Länder)
-│           ├── catalog.py       # queries subsidy_catalog DB → SubsidyContext for F11
+│           ├── catalog.py       # queries subsidy_catalog DB → SubsidyContext, injected into engine
 │           └── crawler.py       # periodic refresh stub (🔶 stretch)
 ├── adapters/      # All external I/O. No business logic.
 │   ├── supabase.py      # PostgREST client using SERVICE_ROLE key
@@ -82,9 +83,11 @@ src/app/
 └── core/config.py          # pydantic-settings; all secrets live here, never in frontend
 ```
 
-`solar_layer/` and `permit_layer/` are the two engines that actually run end-to-end today; the
-electricity_layer/heatpump_layer/ev_layer ladder modules implement the bucket math. Each engine has its
-own `INFO.md` next to the code — read it before changing that engine.
+The full ladder runs end-to-end today: `engine.recommend()` → `scenarios.build_ladder` runs the
+electricity_layer/heatpump_layer/ev_layer bucket math over the four cumulative rungs, resolves
+subsidies, and (via `tiers.build_tiers`) packages the result into three dashboard offers. `solar_layer/`
+and `permit_layer/` are the heavier sub-engines; each has its own `INFO.md` next to the code — read it
+before changing that engine.
 
 ### Key invariant: domain purity
 
@@ -105,7 +108,7 @@ POST /recommend
 
 ### Models are a frozen contract
 
-`domain/models.py` matches `specs/api/openapi.yaml` exactly (F02). Do not add fields without updating both the spec and the TypeScript types in `apps/frontend/src/lib/types.ts`. The comment `# FROZEN CONTRACT (F02)` marks files that should not diverge.
+`domain/models.py` matches `specs/api/openapi.yaml` exactly (F02). Do not add fields without updating both the spec and the TypeScript types in `apps/frontend/src/lib/types.ts`. The comment `# FROZEN CONTRACT (F02)` marks files that should not diverge. The response root `Recommendation` carries `alternatives[]` (the four cumulative ladder rungs) **and** `tiers[]` (three `Tier` cards — low/middle/high — for the dashboard, F27).
 
 ### Stubs and TODO markers
 
@@ -121,7 +124,7 @@ Most engine and service functions raise `NotImplementedError` with a `TODO F##` 
 tests/
 ├── conftest.py          # FastAPI TestClient fixture (client)
 ├── unit/
-│   ├── domain/          # TDD against specs/domain/fixtures/ vectors
+│   ├── domain/          # TDD against specs/domain/fixtures/ vectors (incl. test_tiers.py for F27)
 │   └── adapters/        # adapter unit tests
 └── integration/
     ├── test_health.py

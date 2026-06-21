@@ -133,6 +133,59 @@
       "payback_note": "€120/mo from day one; EV is the biggest single contributor"
     }
   ],
+  "tiers": [
+    {
+      "id": "low",
+      "name": "Einstieg",
+      "tagline": "Niedrigste Anfangsinvestition — solide Grundersparnis.",
+      "scenario_id": "pv-only",
+      "label": "☀️ Solar 9 kWp",
+      "capex_after_subsidy_eur": 13050.0,
+      "installment_eur_month": 103.0,
+      "monthly_saving_eur": -24.0,
+      "saving_after_payoff_eur": 80.0,
+      "break_even_month": 180,
+      "lifetime_years": 20,
+      "lifetime_saving_eur": 480.0,
+      "headline_eur": 80.0,
+      "headline_caption": "€/Monat nach Tilgung · ab €13,050 Investition",
+      "rationale_md": "Der günstigste Einstieg mit nur €13,050 Kapitaleinsatz und €103/Monat Rate. Spart nach Tilgung dauerhaft €80/Monat — der risikoärmste Schritt in die Energiewende."
+    },
+    {
+      "id": "middle",
+      "name": "Bestes Preis-Leistungs-Verhältnis",
+      "tagline": "Der Sweet Spot aus Investition und Ersparnis.",
+      "scenario_id": "pv-battery-hp",
+      "label": "☀️ Solar + 🔋 Battery + ♨️ Heat pump",
+      "capex_after_subsidy_eur": 18650.0,
+      "installment_eur_month": 234.0,
+      "monthly_saving_eur": -4.0,
+      "saving_after_payoff_eur": 230.0,
+      "break_even_month": 178,
+      "lifetime_years": 20,
+      "lifetime_saving_eur": 13080.0,
+      "headline_eur": 230.0,
+      "headline_caption": "€/Monat nach Tilgung · €18,650 Investition",
+      "rationale_md": "Das beste Preis-Leistungs-Verhältnis: für €18,650 dauerhaft €230/Monat — über 20 Jahre rund €13,080 Gesamtersparnis."
+    },
+    {
+      "id": "high",
+      "name": "Zukunftssicher",
+      "tagline": "Investition in die Zukunft — maximale Gesamtersparnis.",
+      "scenario_id": "full-bundle",
+      "label": "☀️ Solar + 🔋 Battery + ♨️ Heat pump + 🚗 EV charger",
+      "capex_after_subsidy_eur": 31000.0,
+      "installment_eur_month": 244.0,
+      "monthly_saving_eur": 120.0,
+      "saving_after_payoff_eur": 364.0,
+      "break_even_month": 156,
+      "lifetime_years": 20,
+      "lifetime_saving_eur": 43440.0,
+      "headline_eur": 43440.0,
+      "headline_caption": "über 20 Jahre · danach €364/Monat dauerhaft",
+      "rationale_md": "Das volle Paket: rund €43,440 Gesamtersparnis über 20 Jahre und danach dauerhaft €364/Monat — maximale Unabhängigkeit."
+    }
+  ],
   "upsell": {
     "from_scenario_id": "pv-battery",
     "to_scenario_id": "full-bundle",

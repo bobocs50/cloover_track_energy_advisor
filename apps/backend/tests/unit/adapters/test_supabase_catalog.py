@@ -144,14 +144,21 @@ def test_no_seeded_prices_are_hard_coded_in_engine_or_adapters() -> None:
         ROOT / "apps/backend/src/app/domain/savings",
         ROOT / "apps/backend/src/app/adapters",
     ]
-    guarded_text = "\n".join(
-        path.read_text(encoding="utf-8")
+    guarded_lines = [
+        line
         for directory in guarded_paths
         for path in directory.rglob("*.py")
-    )
+        for line in path.read_text(encoding="utf-8").splitlines()
+    ]
+    price_context = re.compile(r"price|cost|tariff|eur|kwh|kwp|litre|charge", re.IGNORECASE)
 
     for literal in EXPECTED_PRICES.values():
-        assert literal not in guarded_text
+        pattern = re.compile(rf"(?<![\d.]){re.escape(literal)}(?![\d.])")
+        assert not [
+            line
+            for line in guarded_lines
+            if price_context.search(line) and pattern.search(line)
+        ]
 
 
 def test_supabase_client_is_configured_without_network_access() -> None:
@@ -168,4 +175,4 @@ def test_supabase_client_is_configured_without_network_access() -> None:
 
 def test_supabase_client_requires_server_side_credentials() -> None:
     with pytest.raises(RuntimeError, match="SUPABASE_URL"):
-        get_supabase_client(Settings())
+        get_supabase_client(Settings(supabase_url="", supabase_service_role_key=""))

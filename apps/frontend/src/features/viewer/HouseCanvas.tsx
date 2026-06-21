@@ -102,7 +102,9 @@ export default function HouseCanvas({ polygon, params, addons }: HouseCanvasProp
   // Frame the camera relative to the footprint size — pulled back for a clean
   // 3/4 view that fits the whole house with headroom.
   const reach = Math.max(bounds.halfLongM, bounds.halfShortM, 4);
-  const camPos: [number, number, number] = [reach * 1.9, reach * 1.6, reach * 2.7];
+  // Start ~10 % further back than the snug framing — the previous view sat too
+  // tight — then pull back another 15 % so the ground solar array clears frame.
+  const camPos: [number, number, number] = [reach * 2.4, reach * 2.02, reach * 3.42];
 
   return (
     <Canvas

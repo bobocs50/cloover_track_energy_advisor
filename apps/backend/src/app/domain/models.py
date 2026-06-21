@@ -416,6 +416,101 @@ class ScenarioResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Three packaged tiers (dashboard offer cards)
+# ---------------------------------------------------------------------------
+
+
+class Tier(BaseModel):
+    """One of three packaged offers shown side-by-side on the dashboard.
+
+    The three tiers are derived from the cumulative ladder (alternatives[]) and
+    are designed to be shown together (not chosen between by the engine):
+
+    - ``low``    — cost-efficient entry: the cheapest rung with the fastest
+                   payback (lowest capital at risk).
+    - ``middle`` — best-value milestone: the strongest net monthly saving below
+                   the full commitment.
+    - ``high``   — future-proof: the full bundle.  Its headline is the long-term
+                   story — cumulative saving over ``lifetime_years`` plus the
+                   permanent €/mo once the loan is paid off.
+
+    ``scenario_id`` references the matching ScenarioResult in alternatives[];
+    the numeric fields are copied here so a dashboard card is self-contained.
+    Every € figure here is also derivable from a ScenarioResult (numeric
+    authority is never the LLM prose).
+    """
+
+    id: Literal["low", "middle", "high"] = Field(
+        ..., description="Tier rank.", examples=["high"]
+    )
+    name: str = Field(
+        ...,
+        description="Marketing name for the tier card.",
+        examples=["Future-Proof"],
+    )
+    tagline: str = Field(
+        ...,
+        description="One-line pitch shown under the tier name.",
+        examples=["Invest in the future — maximum lifetime saving."],
+    )
+    scenario_id: str = Field(
+        ...,
+        description="ID of the ScenarioResult (in alternatives[]) this tier maps to.",
+        examples=["full-bundle"],
+    )
+    label: str = Field(
+        ...,
+        description="Human-readable bundle label.",
+        examples=["☀️ Solar + 🔋 Battery + ♨️ Heat pump + 🚗 EV charger"],
+    )
+    capex_after_subsidy_eur: float = Field(
+        ..., description="Total capital after subsidies for this tier.", examples=[28200]
+    )
+    installment_eur_month: float = Field(
+        ..., description="Monthly loan installment for this tier.", examples=[244]
+    )
+    monthly_saving_eur: float = Field(
+        ...,
+        description="Net monthly saving today (installment deducted). May be small/negative for low tier.",
+        examples=[137],
+    )
+    saving_after_payoff_eur: float = Field(
+        ...,
+        description="Permanent monthly saving once the loan is paid off.",
+        examples=[392],
+    )
+    break_even_month: int = Field(
+        ..., description="Month at which cumulative cash flow turns positive.", examples=[118]
+    )
+    lifetime_years: int = Field(
+        ..., description="Horizon used for the long-term cumulative figure.", examples=[20]
+    )
+    lifetime_saving_eur: float = Field(
+        ...,
+        description=(
+            "Cumulative NET saving over lifetime_years: net saving during the loan "
+            "plus after-payoff saving for the remaining years.  The high-tier headline."
+        ),
+        examples=[64000],
+    )
+    headline_eur: float = Field(
+        ...,
+        description="The single big number to feature on this tier's card.",
+        examples=[64000],
+    )
+    headline_caption: str = Field(
+        ...,
+        description="Short caption explaining what headline_eur represents.",
+        examples=["über 20 Jahre · danach €392/Monat dauerhaft"],
+    )
+    rationale_md: str = Field(
+        ...,
+        description="Markdown one-liner on why a household would pick this tier.",
+        examples=["Das volle Paket: höchste Gesamtersparnis und maximale Unabhängigkeit."],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Response root
 # ---------------------------------------------------------------------------
 
@@ -436,6 +531,14 @@ class Recommendation(BaseModel):
     alternatives: list[ScenarioResult] = Field(
         ...,
         description="The four cumulative ladder rungs in order (☀️→🔋→♨️→🚗).",
+        min_length=1,
+    )
+    tiers: list[Tier] = Field(
+        ...,
+        description=(
+            "Three packaged offers (low / middle / high) derived from the ladder, "
+            "shown side-by-side on the dashboard.  Always ordered low → middle → high."
+        ),
         min_length=1,
     )
     upsell: Upsell = Field(
