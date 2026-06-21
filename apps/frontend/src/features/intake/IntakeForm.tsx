@@ -2,7 +2,18 @@
 // shape. The street field doubles as a Mapbox address autocomplete: picking a
 // suggestion fills street/house_no/plz/city and flies the globe (via onAddressPick).
 // Styling follows data/style.md (light SaaS card); motion follows emil-design-eng.
-import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState, useId } from "react";
+import {
+  type ChangeEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useRef,
+  useState,
+  useId,
+} from "react";
+import { CheckCircle2, FileText, Upload } from "lucide-react";
 import { type FieldErrors, type UseFormRegister, useForm } from "react-hook-form";
 import type { Household } from "@/lib/types";
 import { type AddressSuggestion, geocodeAddress } from "@/lib/mapbox-geocode";
@@ -35,6 +46,104 @@ const DEFAULT_HOUSE_COORDS = {
   lat: 49.53094,
   lon: 9.32659,
 };
+
+type ImportFieldKey =
+  | "address.street"
+  | "address.house_no"
+  | "address.city"
+  | "plz"
+  | "electricity_eur_month"
+  | "heating.fuel"
+  | "heating.eur_month";
+
+interface ImportSuggestion {
+  key: ImportFieldKey;
+  label: string;
+  value: string;
+  confidence: "high" | "medium";
+}
+
+interface DemoExtraction {
+  fileName: string;
+  title: string;
+  note: string;
+  suggestions: ImportSuggestion[];
+}
+
+const IMPORT_FIELD_LABELS: Record<ImportFieldKey, string> = {
+  "address.street": "Street",
+  "address.house_no": "House no.",
+  "address.city": "City",
+  plz: "Postal code",
+  electricity_eur_month: "Electricity",
+  "heating.fuel": "Heating type",
+  "heating.eur_month": "Heating",
+};
+
+function buildSuggestion(
+  key: ImportFieldKey,
+  value: string,
+  confidence: "high" | "medium" = "high",
+) {
+  return { key, label: IMPORT_FIELD_LABELS[key], value, confidence };
+}
+
+function extractDemoDocument(file: File): DemoExtraction {
+  const name = file.name.toLowerCase();
+  const baseAddress = [
+    buildSuggestion("address.street", "Am Nahholz"),
+    buildSuggestion("address.house_no", "54"),
+    buildSuggestion("plz", "74722"),
+    buildSuggestion("address.city", "Buchen"),
+  ];
+
+  if (name.includes("strom") || name.includes("electric") || name.includes("power")) {
+    return {
+      fileName: file.name,
+      title: "Electricity bill detected",
+      note: "Demo extraction found address and monthly electricity spend.",
+      suggestions: [...baseAddress, buildSuggestion("electricity_eur_month", "132")],
+    };
+  }
+
+  if (name.includes("gas")) {
+    return {
+      fileName: file.name,
+      title: "Gas heating bill detected",
+      note: "Demo extraction found fossil heating type and average monthly cost.",
+      suggestions: [
+        ...baseAddress,
+        buildSuggestion("heating.fuel", "GAS"),
+        buildSuggestion("heating.eur_month", "154"),
+      ],
+    };
+  }
+
+  if (name.includes("oil") || name.includes("heating") || name.includes("waerme")) {
+    return {
+      fileName: file.name,
+      title: "Heating bill detected",
+      note: "Demo extraction found fossil heating type and average monthly cost.",
+      suggestions: [
+        ...baseAddress,
+        buildSuggestion("heating.fuel", "OIL"),
+        buildSuggestion("heating.eur_month", "176"),
+      ],
+    };
+  }
+
+  return {
+    fileName: file.name,
+    title: "Household bill imported",
+    note: "Demo extraction mapped the document to the most useful intake fields.",
+    suggestions: [
+      ...baseAddress,
+      buildSuggestion("electricity_eur_month", "128", "medium"),
+      buildSuggestion("heating.fuel", "OIL", "medium"),
+      buildSuggestion("heating.eur_month", "168", "medium"),
+    ],
+  };
+}
 
 const inputBase =
   "w-full rounded-lg border bg-white px-3.5 py-2.5 text-[14px] text-text-1 outline-none transition-colors duration-150 ease-out-strong placeholder:text-text-3 focus:border-accent";
@@ -99,6 +208,10 @@ export interface IntakeFormProps {
 export default function IntakeForm({ onAddressPick, onComplete }: IntakeFormProps) {
   const [mobilityMode, setMobilityMode] = useState<"km" | "eur">("km");
   const [savedCity, setSavedCity] = useState<string | null>(null);
+  const [importDragActive, setImportDragActive] = useState(false);
+  const [extraction, setExtraction] = useState<DemoExtraction | null>(null);
+  const [importApplied, setImportApplied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Address autocomplete state.
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
@@ -200,6 +313,44 @@ export default function IntakeForm({ onAddressPick, onComplete }: IntakeFormProp
     setMobilityMode(mode);
   }
 
+  function handleImportFile(file: File | undefined) {
+    if (!file) return;
+    setExtraction(extractDemoDocument(file));
+    setImportApplied(false);
+  }
+
+  function onImportDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setImportDragActive(true);
+  }
+
+  function onImportDragLeave(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setImportDragActive(false);
+  }
+
+  function onImportDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setImportDragActive(false);
+    handleImportFile(event.dataTransfer.files[0]);
+  }
+
+  function applyExtraction() {
+    if (!extraction) return;
+    extraction.suggestions.forEach((suggestion) => {
+      setValue(suggestion.key, suggestion.value, {
+        shouldDirty: true,
+        shouldTouch: true,
+        shouldValidate: true,
+      });
+    });
+    setSavedCity(
+      extraction.suggestions.find((suggestion) => suggestion.key === "address.city")?.value ?? null,
+    );
+    setImportApplied(true);
+  }
+
   const showHouse = async () => {
     const data = getValues();
     const fullAddress = `${data.address.street} ${data.address.house_no}, ${data.plz} ${data.address.city}`;
@@ -238,7 +389,7 @@ export default function IntakeForm({ onAddressPick, onComplete }: IntakeFormProp
           What does energy cost you today?
         </h1>
         <p className="mt-1.5 text-[13px] leading-relaxed text-text-2">
-          One-time entry. No account, no upload, no home visit.
+          One-time entry. Add details manually or import them from a bill.
         </p>
       </div>
 
@@ -478,6 +629,19 @@ export default function IntakeForm({ onAddressPick, onComplete }: IntakeFormProp
 
         {/* Existing equipment — collapsible optional section */}
         <ExistingEquipment register={register} errors={errors} />
+
+        <DocumentImporter
+          extraction={extraction}
+          dragActive={importDragActive}
+          applied={importApplied}
+          fileInputRef={fileInputRef}
+          onApply={applyExtraction}
+          onBrowse={() => fileInputRef.current?.click()}
+          onFile={handleImportFile}
+          onDragOver={onImportDragOver}
+          onDragLeave={onImportDragLeave}
+          onDrop={onImportDrop}
+        />
       </div>
 
       <div className="shrink-0 border-t border-border px-7 py-5">
@@ -499,6 +663,133 @@ export default function IntakeForm({ onAddressPick, onComplete }: IntakeFormProp
       </div>
     </form>
   );
+}
+
+function DocumentImporter({
+  extraction,
+  dragActive,
+  applied,
+  fileInputRef,
+  onApply,
+  onBrowse,
+  onFile,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  extraction: DemoExtraction | null;
+  dragActive: boolean;
+  applied: boolean;
+  fileInputRef: RefObject<HTMLInputElement>;
+  onApply: () => void;
+  onBrowse: () => void;
+  onFile: (file: File | undefined) => void;
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onDragLeave: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
+}) {
+  function onInputChange(event: ChangeEvent<HTMLInputElement>) {
+    onFile(event.target.files?.[0]);
+    event.target.value = "";
+  }
+
+  return (
+    <div className="border-t border-border px-7 py-5">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.png,.jpg,.jpeg,.webp"
+        className="sr-only"
+        onChange={onInputChange}
+      />
+
+      <div
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        className={`rounded-lg border border-dashed p-4 transition-[border-color,background-color,transform] duration-150 ease-out-strong ${
+          dragActive
+            ? "border-accent bg-accent-soft translate-y-[-1px]"
+            : "border-border bg-surface/70 hover:border-accent/50"
+        }`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-accent">
+            {extraction ? <FileText aria-hidden className="h-4 w-4" /> : <Upload aria-hidden className="h-4 w-4" />}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-text-3">
+                  Document importer
+                </p>
+                <p className="mt-0.5 truncate text-[13px] font-semibold text-text-1">
+                  {extraction ? extraction.title : "Drop a bill or sample document"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onBrowse}
+                className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-border bg-white px-3 text-[12px] font-semibold text-text-2 transition-[transform,border-color,background-color] duration-150 ease-out-strong hover:-translate-y-px hover:border-accent/40 hover:bg-white active:scale-[0.98]"
+              >
+                Browse
+              </button>
+            </div>
+
+            <p className="mt-1 text-[12px] leading-relaxed text-text-3">
+              {extraction
+                ? `${extraction.note} ${extraction.fileName}`
+                : "PDF or image. Demo mode extracts values locally and lets you review them first."}
+            </p>
+
+            {extraction ? (
+              <div className="mt-3">
+                <div className="flex flex-wrap gap-2">
+                  {extraction.suggestions.map((suggestion) => (
+                    <span
+                      key={`${suggestion.key}-${suggestion.value}`}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-white px-2.5 py-1 text-[12px] text-text-2"
+                    >
+                      <span className="shrink-0 font-medium text-text-1">{suggestion.label}</span>
+                      <span className="truncate">{formatImportValue(suggestion)}</span>
+                      <span
+                        className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                          suggestion.confidence === "high" ? "bg-success" : "bg-warning"
+                        }`}
+                        aria-label={`${suggestion.confidence} confidence`}
+                      />
+                    </span>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onApply}
+                  className={`mt-3 inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3.5 text-[12px] font-semibold transition-[transform,filter] duration-150 ease-out-strong active:scale-[0.98] ${
+                    applied ? "bg-success-soft text-success" : "bg-accent text-white hover:brightness-95"
+                  }`}
+                >
+                  {applied ? <CheckCircle2 aria-hidden className="h-4 w-4" /> : null}
+                  {applied ? "Applied to form" : "Apply to form"}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatImportValue(suggestion: ImportSuggestion) {
+  if (suggestion.key === "electricity_eur_month" || suggestion.key === "heating.eur_month") {
+    return `€${suggestion.value}/mo`;
+  }
+  if (suggestion.key === "heating.fuel") {
+    return suggestion.value === "GAS" ? "Gas" : "Oil";
+  }
+  return suggestion.value;
 }
 
 function ExistingEquipment({
