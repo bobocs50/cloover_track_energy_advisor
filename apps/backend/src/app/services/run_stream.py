@@ -576,7 +576,9 @@ async def _stream_live(
     yield sse(
         eb.make(
             "step_completed", "parent", "ok",
-            "Price catalog resolved", step_id="resolve_pricing", source="database",
+            f"Electricity {ctx.retail_price_eur_kwh * 100:.1f} ct/kWh · live",
+            step_id="resolve_pricing", source="internet",
+            detail=f"Elecz EPEX SPOT + overhead · {ctx.retail_price_eur_kwh:.4f} EUR/kWh",
         )
     )
 
@@ -677,7 +679,14 @@ async def _stream_live(
         eb.make(
             "run_completed", "parent", "accepted",
             f"Done / €{rec.best.monthly_saving_eur:.0f}/mo / {rec.best.scenario_id}",
-            source="engine", payload={"recommendation": rec.model_dump()},
+            source="engine",
+            payload={
+                "recommendation": rec.model_dump(),
+                "whyItMatters": (
+                    f"Electricity {ctx.retail_price_eur_kwh * 100:.1f} ct/kWh (Elecz)"
+                ),
+                "sourceType": "live_internet",
+            },
         )
     )
 

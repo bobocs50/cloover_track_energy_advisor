@@ -300,7 +300,18 @@ function StageRow({
           <p className="rt-stage-summary">{stage.summary}</p>
         )}
         {resolved && !hasTree && !hasCard && stage.summaryDetail && (
-          <p className="rt-stage-effect">{stage.summaryDetail}</p>
+          <p className="rt-stage-effect">
+            {stage.summaryDetail}
+            {stage.summarySourceType && SOURCE_TYPE_LABEL[stage.summarySourceType] && (
+              <span
+                className="rt-event-chip"
+                data-source={stage.summarySourceType}
+                style={{ marginLeft: 6, verticalAlign: "middle" }}
+              >
+                {SOURCE_TYPE_LABEL[stage.summarySourceType]}
+              </span>
+            )}
+          </p>
         )}
       </div>
     </motion.li>

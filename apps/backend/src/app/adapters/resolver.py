@@ -290,10 +290,14 @@ class Resolver:
                 return next(iter(cat.values()))
             return _OFFLINE_PRICE_CATALOG[component][tier]
 
+        # Prefer live catalog price (Elecz) + PLZ grid-fee overlay over the
+        # reference_plz base value, which is only a static seed.
+        retail_price_eur_kwh = _p("retail_per_kwh") + loc.grid_fee
+
         return (
             PricingContext(
                 plz=plz,
-                retail_price_eur_kwh=loc.retail_price,
+                retail_price_eur_kwh=retail_price_eur_kwh,
                 feedin_price_eur_kwh=_p("feedin_per_kwh"),
                 grid_fee_eur_kwh=loc.grid_fee,
                 dynamic_spread_eur_kwh=_FALLBACK_DYNAMIC_SPREAD,
@@ -368,8 +372,19 @@ class Resolver:
             return offline_row
 
     def _fetch_price_catalog(self) -> dict[str, dict[str, float]]:
+        # Start from offline seed, then overlay live API prices, then DB.
+        catalog: dict[str, dict[str, float]] = {
+            k: dict(v) for k, v in _OFFLINE_PRICE_CATALOG.items()
+        }
+
+        # Live electricity price from Elecz (no key required).
+        from app.adapters.price_fetcher import fetch_electricity_retail
+        live_retail = fetch_electricity_retail()
+        if live_retail is not None:
+            catalog.setdefault("retail_per_kwh", {})["STANDARD"] = live_retail
+
         if not self._has_db():
-            return _OFFLINE_PRICE_CATALOG
+            return catalog
         try:
             with self._get_client() as client:
                 resp = client.get(
@@ -380,18 +395,16 @@ class Resolver:
                     },
                 )
                 if resp.status_code == 200:
-                    result: dict[str, dict[str, float]] = {}
                     for row in resp.json():
                         comp = str(row["component"])
                         tier = str(row["tier"])
-                        if comp not in result:
-                            result[comp] = {}
-                        if tier not in result[comp]:  # keep latest
-                            result[comp][tier] = float(row["unit_price"])
-                    return result
+                        catalog.setdefault(comp, {})
+                        if tier not in catalog[comp]:
+                            catalog[comp][tier] = float(row["unit_price"])
+                    return catalog
         except Exception:
-            logger.debug("price_catalog DB unavailable; using offline defaults", exc_info=True)
-        return _OFFLINE_PRICE_CATALOG
+            logger.debug("price_catalog DB unavailable; using live + offline defaults", exc_info=True)
+        return catalog
 
     def _fetch_subsidy_catalog(
         self,

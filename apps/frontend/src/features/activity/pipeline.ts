@@ -595,6 +595,8 @@ export interface StageGroup {
   solar?: SolarDetail;
   /** For the subsidy stage: resolved grants + their combined cash value. */
   subsidies?: { grants: SubsidyGrant[]; totalEur: number };
+  /** Source type of the last event — drives the chip next to summaryDetail. */
+  summarySourceType?: string;
 }
 
 /** Group permit rows by category in canonical order (unknowns appended). */
@@ -644,6 +646,7 @@ export function groupEventsByStage(
       events: rows,
       summary: resolved && last ? last.label : undefined,
       summaryDetail: resolved ? last?.offerEffect ?? last?.reason : undefined,
+      summarySourceType: resolved ? last?.sourceType : undefined,
       categories: s.id === "permit" && rows.length ? permitCategories(rows) : undefined,
       solar,
       subsidies: grants.length
