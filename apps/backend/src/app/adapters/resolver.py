@@ -294,6 +294,33 @@ class Resolver:
         # reference_plz base value, which is only a static seed.
         retail_price_eur_kwh = _p("retail_per_kwh") + loc.grid_fee
 
+        # Live fuel prices from Tankerkönig — overlay on catalog seeds
+        from app.adapters.fuel_price_fetcher import fetch_fuel_prices
+
+        live_petrol, live_diesel = fetch_fuel_prices(
+            loc.lat, loc.lon, self._settings.tankerkoenig_api_key
+        )
+        petrol = live_petrol if live_petrol is not None else _p("petrol_per_litre")
+        diesel = live_diesel if live_diesel is not None else _p("diesel_per_litre")
+        if live_petrol is not None:
+            assumptions.append(
+                Assumption(
+                    field="petrol_per_litre_eur",
+                    value=f"€{live_petrol:.3f}/L",
+                    source="Tankerkönig — live median within 10 km",
+                    editable=True,
+                )
+            )
+        if live_diesel is not None:
+            assumptions.append(
+                Assumption(
+                    field="diesel_per_litre_eur",
+                    value=f"€{live_diesel:.3f}/L",
+                    source="Tankerkönig — live median within 10 km",
+                    editable=True,
+                )
+            )
+
         return (
             PricingContext(
                 plz=plz,
@@ -307,8 +334,8 @@ class Resolver:
                 wallbox_fixed_eur=_p("wallbox_fixed"),
                 oil_per_litre_eur=_p("oil_per_litre"),
                 gas_per_kwh_eur=_p("gas_per_kwh"),
-                petrol_per_litre_eur=_p("petrol_per_litre"),
-                diesel_per_litre_eur=_p("diesel_per_litre"),
+                petrol_per_litre_eur=petrol,
+                diesel_per_litre_eur=diesel,
                 public_charge_per_kwh_eur=_p("public_charge_per_kwh"),
                 home_charge_price_eur_kwh=_p("home_charge_per_kwh"),
                 financing_apr=_FINANCING_APR,
